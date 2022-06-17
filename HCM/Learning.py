@@ -14,7 +14,8 @@ def learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record, c
     previous_chunk_boundary_record: boundary record of when the previous chunks have ended. '''
 
     for chunk in current_chunks:
-        chunk_termination_time[np.array(chunk)[-1, :, :] > 0] = t # update chunk termination time for the current chunks
+        chunk_termination_time[
+            np.array(chunk)[-1, :, :] > 0] = t  # update chunk termination time for the current chunks
         temporal_length_of_current_chunk = tuple_to_arr(chunk).shape[0]
         # current_chunk_starting_time = t - temporal_length_of_current_chunk + 1  # the "current chunk" starts at:
         for i in range(0, min(temporal_length_of_current_chunk + 1,
@@ -31,108 +32,55 @@ def learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record, c
     return chunk_termination_time, cg
 
 
-
-def learning_and_update(current_chunks_idx, chunk_record, cg, t):
+def learning_and_update(current_chunks_idx, chunk_record, cg, t, learn = True):
     '''
     Update transitions and marginals and decide to chunk
     t: finishing parsing at time t
     current_chunks_idx: the chunks ending at the current time point
     chunk_record: boundary record of when the previous chunks have ended.'''
     n_t = cg.pad
-    if len(chunk_record)>1:
+    if len(chunk_record) > 1:
         for chunk_idx in current_chunks_idx:
-            delta_t = 0 # the difference between the end of the current chunk and the end of the previous chunks
+            delta_t = 0  # the difference between the end of the current chunk and the end of the previous chunks
             temporal_length_chunk = cg.chunks[chunk_idx].T
-            while delta_t <= temporal_length_chunk+n_t and len(chunk_record) > 1:# looking backward to find, padding length
+            while delta_t <= temporal_length_chunk + n_t and len(
+                    chunk_record) > 1:  # looking backward to find, padding length
                 # adjacent chunks
-                chunkendtime  = t - delta_t
+                chunkendtime = t - delta_t
                 if chunkendtime in list(chunk_record.keys()):
                     previous_chunks = chunk_record[chunkendtime]
                     # current_chunk_starting_time = t - temporal_length_of_current_chunk + 1  # the "current chunk" starts at:
                     for prev_idx, _ in previous_chunks:
-                        samechunk = prev_idx==chunk_idx and delta_t==0
-                        if not samechunk and cg.chunks[prev_idx].variable == []:# do not check variable chunks
+                        samechunk = prev_idx == chunk_idx and delta_t == 0
+                        if not samechunk and cg.chunks[prev_idx].variable == []:  # do not check variable chunks
                             combined_chunk, dt = check_adjacency(prev_idx, chunk_idx, delta_t, t, cg)
                             if combined_chunk is not None:
                                 cg.chunks[prev_idx].update_transition(chunk_idx, dt)
-                                cg, chunked = threshold_chunking(prev_idx, chunk_idx, combined_chunk, dt, cg)
+                                if learn == True: # online learning
+                                    cg, chunked = threshold_chunking(prev_idx, chunk_idx, combined_chunk, dt, cg)
                 delta_t = delta_t + 1
     return cg
 
+def rational_update(current_chunks_idx, chunk_record, cg, t):
+    '''check chunk adjacency in cg, and find the most urgent chunk to combine together'''
+    n_t = cg.pad
+    for chunk_idx in cg.chunks:
+        delta_t = 0  # the difference between the end of the current chunk and the end of the previous chunks
+        temporal_length_chunk = cg.chunks[chunk_idx].T
+        while delta_t <= temporal_length_chunk + n_t and len(chunk_record) > 1:
+            chunkendtime = t - delta_t
+            if chunkendtime in list(chunk_record.keys()):
+                previous_chunks = chunk_record[chunkendtime]
+                for prev_idx, _ in previous_chunks:
+                    samechunk = prev_idx == chunk_idx and delta_t == 0
+                    if not samechunk and cg.chunks[prev_idx].variable == []:  # do not check variable chunks
+                        combined_chunk, dt = check_adjacency(prev_idx, chunk_idx, delta_t, t, cg)
+                        if combined_chunk is not None:
+                            cg.chunks[prev_idx].update_transition(chunk_idx, dt)
+            delta_t = delta_t + 1
+    return cg
 
-def threshold_chunking_mtx(prev, current, combined_chunk, dt, cg):
-    def hypothesis_test(cl,cr,Marg,T, dt,zero):
-        M = Marg.copy()
-        M.pop(zero) # delete zero since it is not useful anyways
-        N = np.sum(list(M.values())) # still applicable to spatial and spatial temporal chunks?
-        # Expected
-        ep1p1 = M[cl]/N*M[cr]
-        ep1p0 = M[cl]/N*(N - M[cr])
-        ep0p1 = (N - M[cl])/N*M[cr]
-        ep0p0 = (N - M[cl])/N*(N - M[cr])
-        # Observed
-        op1p1 = T[cl][dt][cr]
-        op1p0 = np.sum(list(T[cl][dt].values())) - T[cl][dt][cr]
-        op0p1 = 0
-        op0p0 = 0
-
-        for ncl in list(T.keys()):# iterate over p0, which is the cases where cl is not observed
-            if ncl != cl:
-                if dt in list(T[ncl].keys()):
-                    if cr in list(T[ncl][dt].keys()):
-                        op0p1 = op0p1 + T[ncl][dt][cr]
-                        for ncr in list(T[ncl][dt].keys()):
-                            if ncr !=cr:
-                                op0p0 = op0p0 + T[ncl][dt][ncr]
-        # if any cell contains less than 5 observations, need to
-        if ep0p0 <=3 or ep1p1 <=3 or ep1p0 <=3 or ep0p1 <=3:
-            print('not enough observations')
-            return True # cannot continute the test because of lack of sample size
-
-        _, pvalue = stats.chisquare([op1p1,op1p0,op0p1,op0p0],f_exp=[ep1p1,ep1p0,ep0p1,ep0p0],ddof=1)
-        if pvalue == 0.0:
-            print('check')
-        if pvalue < 0.05:
-            return False # reject independence hypothesis, there is a correlation
-        else:
-            return True
-
-    """cg: chunking graph
-    learning function manipulates when do the chunk update happen
-    chunks when some combination goes beyond a threshold"""
-    chunked = False  # unless later it was verified to fit into the chunking criteria.
-    cat = combined_chunk
-    satisfy_criteria = False  # the criteria for chunking
-    chunk_f = cg.M
-    chunk_pair_f = cg.T
-    N = 10# one needs three observations of one item in addition to three observations from one item to another item
-    # to form a chunk
-    if prev in list(chunk_f.keys()):
-        try:
-            if str(dt) in list(chunk_pair_f[prev].keys()):
-                if current in list(chunk_pair_f[prev][str(dt)].keys()):
-                    if chunk_f[prev] > N:
-                        if chunk_pair_f[prev][str(dt)][current] > N:
-                            if hypothesis_test(prev,current,cg.M,cg.T,str(dt),cg.zero) == False:
-                                satisfy_criteria = True
-
-        except(KeyError):
-            print('check what is going on here')
-            print('dt ', str(dt))
-            print('chunk_pair_f ', chunk_pair_f)
-            print('chunk_f ', chunk_f)
-            print('current ', current, ' prev ', prev)
-
-
-    if satisfy_criteria:
-        # decide if the number of exposure is significant enough to be concatinated together as a chunk
-        chunked = True
-        cg.chunking_reorganization(prev, current, cat, dt)
-    return cg, chunked
-
-
-def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
-    """combined_chunk: a new chunk instance"""
+def rational_learning(cg):
     def hypothesis_test(clidx, cridx, cg, dt):
         cl = cg.chunks[clidx]
         cr = cg.chunks[cridx]
@@ -151,7 +99,7 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
         op1p0 = cl.get_N_transition(dt) - cl.adjacency[dt][cridx]
         op0p1 = 0
         op0p0 = 0
-        for ncl in list(cg.chunks):# iterate over p0, which is the cases where cl is not observed
+        for ncl in list(cg.chunks):  # iterate over p0, which is the cases where cl is not observed
             if ncl != cl:
                 if dt in list(ncl.adjacency.keys()):
                     if cridx in list(ncl.adjacency[dt].keys()):
@@ -160,9 +108,145 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
                             if ncridx != cr:
                                 op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
 
-        _, pvalue = stats.chisquare([op1p1,op1p0,op0p1,op0p0], f_exp=[ep1p1,ep1p0,ep0p1,ep0p0], ddof=1)
+        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
         if pvalue < 0.05:
-            return False # reject independence hypothesis, there is a correlation
+            return False  # reject independence hypothesis, there is a correlation
+        else:
+            return True
+
+    # iterate through all chunk pairs and find the chunks with the biggest candidancy
+    candidancy_pairs = []
+
+    for _prevck in cg.chunks:
+        _previdx = _prevck.index
+        for _dt in list(_prevck.adjacency.keys()):
+            for _postidx in list(_prevck.adjacency[_dt].keys()):
+                _postck = cg.chunks[_postidx]
+                _cat = combinechunks(_previdx, _postidx, _dt, cg)
+                # hypothesis test
+                if hypothesis_test(_previdx, _postidx, cg, _dt) == False:  # reject null hypothesis
+                    candidancy_pairs.append([(_previdx, _postidx,_cat,_dt), _prevck.adjacency[_dt][_postidx]])
+
+    candidancy_pairs.sort(key=lambda tup:tup[1],reverse=True)
+
+    n_update = 10 # number of chunk combinations allowed.
+    for i in range(0, n_update):
+        prev_idx, current_idx, cat, dt = candidancy_pairs[i][0]
+        cg.chunking_reorganization(prev_idx, current_idx, cat, dt)
+
+        if i>len(candidancy_pairs):
+            break
+    cg.empty_counts()
+
+    # empty out all the counts before the next while loop
+
+
+    return cg
+
+
+def threshold_chunking_mtx(prev, current, combined_chunk, dt, cg):
+    def hypothesis_test(cl, cr, Marg, T, dt, zero):
+        M = Marg.copy()
+        M.pop(zero)  # delete zero since it is not useful anyways
+        N = np.sum(list(M.values()))  # still applicable to spatial and spatial temporal chunks?
+        # Expected
+        ep1p1 = M[cl] / N * M[cr]
+        ep1p0 = M[cl] / N * (N - M[cr])
+        ep0p1 = (N - M[cl]) / N * M[cr]
+        ep0p0 = (N - M[cl]) / N * (N - M[cr])
+        # Observed
+        op1p1 = T[cl][dt][cr]
+        op1p0 = np.sum(list(T[cl][dt].values())) - T[cl][dt][cr]
+        op0p1 = 0
+        op0p0 = 0
+
+        for ncl in list(T.keys()):  # iterate over p0, which is the cases where cl is not observed
+            if ncl != cl:
+                if dt in list(T[ncl].keys()):
+                    if cr in list(T[ncl][dt].keys()):
+                        op0p1 = op0p1 + T[ncl][dt][cr]
+                        for ncr in list(T[ncl][dt].keys()):
+                            if ncr != cr:
+                                op0p0 = op0p0 + T[ncl][dt][ncr]
+        # if any cell contains less than 5 observations, need to
+        if ep0p0 <= 3 or ep1p1 <= 3 or ep1p0 <= 3 or ep0p1 <= 3:
+            print('not enough observations')
+            return True  # cannot continute the test because of lack of sample size
+
+        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        if pvalue == 0.0:
+            print('check')
+        if pvalue < 0.05:
+            return False  # reject independence hypothesis, there is a correlation
+        else:
+            return True
+
+    """cg: chunking graph
+    learning function manipulates when do the chunk update happen
+    chunks when some combination goes beyond a threshold"""
+    chunked = False  # unless later it was verified to fit into the chunking criteria.
+    cat = combined_chunk
+    satisfy_criteria = False  # the criteria for chunking
+    chunk_f = cg.M
+    chunk_pair_f = cg.T
+    N = 10  # one needs three observations of one item in addition to three observations from one item to another item
+    # to form a chunk
+    if prev in list(chunk_f.keys()):
+        try:
+            if str(dt) in list(chunk_pair_f[prev].keys()):
+                if current in list(chunk_pair_f[prev][str(dt)].keys()):
+                    if chunk_f[prev] > N:
+                        if chunk_pair_f[prev][str(dt)][current] > N:
+                            if hypothesis_test(prev, current, cg.M, cg.T, str(dt), cg.zero) == False:
+                                satisfy_criteria = True
+
+        except(KeyError):
+            print('check what is going on here')
+            print('dt ', str(dt))
+            print('chunk_pair_f ', chunk_pair_f)
+            print('chunk_f ', chunk_f)
+            print('current ', current, ' prev ', prev)
+
+    if satisfy_criteria:
+        # decide if the number of exposure is significant enough to be concatinated together as a chunk
+        chunked = True
+        cg.chunking_reorganization(prev, current, cat, dt)
+    return cg, chunked
+
+
+def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
+    """combined_chunk: a new chunk instance"""
+
+    def hypothesis_test(clidx, cridx, cg, dt):
+        cl = cg.chunks[clidx]
+        cr = cg.chunks[cridx]
+        assert len(cl.adjacency) > 0
+        assert dt in list(cl.adjacency.keys())
+        n = cg.get_N()
+
+        # Expected
+        ep1p1 = cl.count / n * cr.count
+        ep1p0 = cl.count / n * (n - cr.count)
+        ep0p1 = (n - cl.count) / n * cr.count
+        ep0p0 = (n - cl.count) / n * (n - cr.count)
+
+        # Observed
+        op1p1 = cl.adjacency[dt][cridx]
+        op1p0 = cl.get_N_transition(dt) - cl.adjacency[dt][cridx]
+        op0p1 = 0
+        op0p0 = 0
+        for ncl in list(cg.chunks):  # iterate over p0, which is the cases where cl is not observed
+            if ncl != cl:
+                if dt in list(ncl.adjacency.keys()):
+                    if cridx in list(ncl.adjacency[dt].keys()):
+                        op0p1 = op0p1 + ncl.adjacency[dt][cridx]
+                        for ncridx in list(ncl.adjacency[dt].keys()):
+                            if ncridx != cr:
+                                op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
+
+        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        if pvalue < 0.05:
+            return False  # reject independence hypothesis, there is a correlation
         else:
             return True
 
@@ -179,14 +263,11 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
         if current_idx in list(prev.adjacency[dt].keys()):
             if prev.count > N:
                 if prev.adjacency[dt][current_idx] > N:
-                    if hypothesis_test(prev_idx, current_idx, cg,dt) == False: # reject null hypothesis
+                    if hypothesis_test(prev_idx, current_idx, cg, dt) == False:  # reject null hypothesis
                         chunked = True
                         cg.chunking_reorganization(prev_idx, current_idx, cat, dt)
 
     return cg, chunked
-
-
-
 
 
 import itertools
@@ -200,14 +281,17 @@ def check_overlap(array1, array2):
             output = np.concatenate((output, [array2[i1]]), axis=0)
     return output
 
-def checkequal(chunk1,chunk2):
-    if len(chunk1.content.intersection(chunk2.content)) == max(len(chunk1.content),len(chunk2.content)):
+
+def checkequal(chunk1, chunk2):
+    if len(chunk1.content.intersection(chunk2.content)) == max(len(chunk1.content), len(chunk2.content)):
         return True
     else:
         return False
 
+
 def evaluatesimilarity(chunk1, chunk2):
     return chunk1.checksimilarity(chunk2)
+
 
 def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
     # check adjacency should only check chunks with no variables, in other words, concrete chunks,
@@ -218,8 +302,8 @@ def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
     # chunk ends at the point of the end_point_chunk
     # candidate chunk ends at the point of the end_point_candidate_chunk
     if prev_idx == post_idx:
-        return None, -100 # do not chunk a chunk by itself.
-    elif cg.chunks[prev_idx].conflict(cg.chunks[post_idx]): # chunks have conflicting content
+        return None, -100  # do not chunk a chunk by itself.
+    elif cg.chunks[prev_idx].conflict(cg.chunks[post_idx]):  # chunks have conflicting content
         return None, -100
     else:
         prev = cg.chunks[prev_idx]
@@ -244,12 +328,12 @@ def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
                 newprevcontent.add(tuple(lmsrm))
             prevcontent = newprevcontent
 
-        prevchunk = Chunk(list(prevcontent), H=prev.H, W=prev.W, pad = cg.pad)
+        prevchunk = Chunk(list(prevcontent), H=prev.H, W=prev.W, pad=cg.pad)
         prevchunk.T = prev.T
         prevchunk.H = prev.H
         prevchunk.W = prev.W
 
-        if s_prev<s_post:
+        if s_prev < s_post:
             post_shift = s_post - s_prev
             newpostcontent = set()
             for msrm in postcontent:
@@ -258,7 +342,7 @@ def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
                 newpostcontent.add(tuple(lmsrm))
             postcontent = newpostcontent
 
-        postchunk = Chunk(list(postcontent), H=post.H, W=post.W,pad = cg.pad)
+        postchunk = Chunk(list(postcontent), H=post.H, W=post.W, pad=cg.pad)
         postchunk.T = post.T
         postchunk.H = post.H
         postchunk.W = post.W
@@ -281,15 +365,16 @@ def combinechunks(prev_idx, post_idx, dt, cg):
     s_post = e_prev - dt  # start point is inclusive
     e_post = s_post + l_t_post
     # dt = e_prev - s_post
-    delta_t = e_prev - max(s_post, s_prev)# the overlapping temporal length between the two chunks
-    t_chunk = max(e_post, e_prev) - min(e_post, e_prev) + delta_t + max(s_post, s_prev) - min(s_post, s_prev)# the stretching temporal length of the two chunks
+    delta_t = e_prev - max(s_post, s_prev)  # the overlapping temporal length between the two chunks
+    t_chunk = max(e_post, e_prev) - min(e_post, e_prev) + delta_t + max(s_post, s_prev) - min(s_post,
+                                                                                              s_prev)  # the stretching temporal length of the two chunks
     if t_chunk == l_t_prev and t_chunk == l_t_post and checkequal(prev, post):
-        return None# do not chunk a chunk by itself.
+        return None  # do not chunk a chunk by itself.
     else:
         # initiate a new chunk.
         prevcontent = prev.content.copy()
         postcontent = post.content.copy()
-        if s_prev > s_post: # post start first
+        if s_prev > s_post:  # post start first
             # shift content in time:
             prev_shift = s_prev - s_post
             newprevcontent = set()
@@ -302,7 +387,7 @@ def combinechunks(prev_idx, post_idx, dt, cg):
         prevchunk.H = prev.H
         prevchunk.W = prev.W
 
-        if s_prev < s_post: # prev start first
+        if s_prev < s_post:  # prev start first
             post_shift = s_post - s_prev
             newpostcontent = set()
             for msrm in postcontent:
@@ -310,11 +395,12 @@ def combinechunks(prev_idx, post_idx, dt, cg):
                 lmsrm[0] = lmsrm[0] + post_shift
                 newpostcontent.add(tuple(lmsrm))
             postcontent = newpostcontent
-        postchunk = Chunk(list(postcontent), H=post.H, W=post.W, pad = cg.pad)
+        postchunk = Chunk(list(postcontent), H=post.H, W=post.W, pad=cg.pad)
         postchunk.T = post.T
         postchunk.H = post.H
         postchunk.W = post.W
     return prevchunk.concatinate(postchunk)
+
 
 def check_adjacency_mtx(prev, post, end_point_prev, end_point_post):
     '''returns empty matrix if not chunkable'''
@@ -326,7 +412,7 @@ def check_adjacency_mtx(prev, post, end_point_prev, end_point_post):
     temporal_len_post = tuple_to_arr(post).shape[0]
     start_point_prev = end_point_prev - temporal_len_prev  # the exclusive temporal length
     start_point_post = end_point_post - temporal_len_post  # start point is inclusive
-    #dt = start_point_post - start_point_prev
+    # dt = start_point_post - start_point_prev
     dt = end_point_prev - start_point_post
     T, W, H = tuple_to_arr(prev).shape[0:]
 
@@ -436,14 +522,15 @@ def possible_best_matching_chunks(cg, observation_to_explain):
     observation_len = observation_to_explain.shape[0]
     possible_matching_chunks = []
     best_match_size = 0
-    if len(cg.get_nonzeroM())>0:
+    if len(cg.get_nonzeroM()) > 0:
         for chunk in cg.get_nonzeroM():  # can also go from the biggest chunk to the smallest
             # this is checking whether and which chunk has started at the first observation of the termination time
             subchunk_match, match_size = check_subchunk_match_mtx(observation_to_explain, chunk, size=True)
-            if match_size>=best_match_size:
+            if match_size >= best_match_size:
                 best_match_size = match_size
             if subchunk_match:  # indicator that the subchunk is a match
-                possible_matching_chunks.append(chunk)  # can be that chunk ends earier or later than the current time point
+                possible_matching_chunks.append(
+                    chunk)  # can be that chunk ends earier or later than the current time point
                 if np.array(chunk).shape[0] >= observation_len and match_size >= best_match_size:
                     best_matching_subchunk = np.array(chunk)
 
@@ -451,7 +538,6 @@ def possible_best_matching_chunks(cg, observation_to_explain):
 
 
 def find_relevant_observations(seq, termination_time, t):
-
     H, W = seq.shape[1:]
     min_termin = min(termination_time.flatten())
     relevant_observations = np.zeros([int(t - min(termination_time.flatten())), H, W])
@@ -501,7 +587,8 @@ def identify_chunks(cg, seq, termination_time, t, previous_chunk_boundary_record
             # cancelled
             # load things into current chunks
             current_chunks, termination_time, cg = identify_chunk_ending_with_M(observation_to_explain, cg,
-                                                                                termination_time,t, previous_chunk_boundary_record)
+                                                                                termination_time, t,
+                                                                                previous_chunk_boundary_record)
             previous_chunk_boundary_record.append(current_chunks)
         else:  # nothing in the marginals, find the singleton chunks and load the marginals, relevant obsertvation size
             # = 1
@@ -524,13 +611,13 @@ def identify_chunk_ending_with_M(observation_to_explain, cg, termination_time, t
         debug = debug + 1
         possible_matching_chunks, best_matching_subchunk = possible_best_matching_chunks(cg,
                                                                                          observation_to_explain)
-        if np.sum(np.abs(best_matching_subchunk)) <= 0:# no currentmatching chunk
+        if np.sum(np.abs(best_matching_subchunk)) <= 0:  # no currentmatching chunk
             # check for matching chunks at previous time points.
             if possible_matching_chunks != []:  # chunks end before the termination point
                 max_chunk_size = 0
                 best_matching_subchunk = None
                 for chunk in possible_matching_chunks:
-                    chunkvolume = np.sum(tuple_to_arr(chunk)>0)
+                    chunkvolume = np.sum(tuple_to_arr(chunk) > 0)
                     if chunkvolume >= max_chunk_size:
                         max_chunk_size = chunkvolume
                         best_matching_subchunk = chunk
@@ -543,7 +630,7 @@ def identify_chunk_ending_with_M(observation_to_explain, cg, termination_time, t
                 cg.add_chunk_to_cg_class(best_matching_subchunk)
                 # M = add_chunk_to_M(arr_to_tuple(best_matching_subchunk), M)
                 termination_time, cg = learning_and_update_mtx({best_matching_subchunk}, t_end_best_matching_subchunk,
-                                                           previous_chunk_boundary_record, termination_time, cg)
+                                                               previous_chunk_boundary_record, termination_time, cg)
                 termination_time = update_termination_time({best_matching_subchunk}, termination_time,
                                                            t_end_best_matching_subchunk)
             else:  # possible_matching_chunks == []:
@@ -568,15 +655,16 @@ def identify_chunk_ending_with_M(observation_to_explain, cg, termination_time, t
         observation_to_explain, max_k = refactor_observation(observation_to_explain, return_max_k=True)
     return current_chunks, termination_time, cg
 
-def pop_chunk_in_seq_full(chunk_idx, seqc,cg):#_c_
+
+def pop_chunk_in_seq_full(chunk_idx, seqc, cg):  # _c_
     chunk = cg.chunks[chunk_idx]
     content = chunk.content
-    for tup in content:# remove chunk content one by one from the sequence
+    for tup in content:  # remove chunk content one by one from the sequence
         seqc.remove(tup)
     return seqc
 
 
-def check_chunk_in_seq(chunk, seq): #_c_
+def check_chunk_in_seq(chunk, seq):  # _c_
     """ returns the size of match, how big the matching content is, and how big the chunk is, to be matched"""
     # returns the volume and the temporal length of the chunk content
     content = chunk.content
@@ -596,33 +684,36 @@ def check_chunk_in_seq_boundary(chunk, seq):
     else:
         return 0, 0
 
+
 def check_chunk_in_seq_approximate(chunk, seq):  # more approximate
     if chunk.check_match(seq):
         return chunk.volume, chunk.T
     else:
         return 0, 0
 
+
 def pop_chunk_in_seq_boundary(chunk_idx, seqc, cg):
     # pop everything within the boundary of this chunk in seqc
     chunk = cg.chunks[chunk_idx]
     content = list(chunk.boundarycontent)
-    T = sorted(content,key=lambda tup: tup[0])
-    X = sorted(content,key=lambda tup: tup[1])
-    Y = sorted(content,key=lambda tup: tup[2])
+    T = sorted(content, key=lambda tup: tup[0])
+    X = sorted(content, key=lambda tup: tup[1])
+    Y = sorted(content, key=lambda tup: tup[2])
 
-    tmax,tmin = T[-1][0], T[0][0]
+    tmax, tmin = T[-1][0], T[0][0]
     xmax, xmin = X[-1][1], X[0][1]
     ymax, ymin = Y[-1][2], Y[0][2]
     seqcc = seqc.copy()
-    for tup in seqc:# remove chunk content one by one from the sequence
-        if tup[0]>= tmin and tup[0]<=tmax and tup[1] >= xmin and tup[1]<=xmax and tup[2] >= ymin and tup[2]<=ymax:
+    for tup in seqc:  # remove chunk content one by one from the sequence
+        if tup[0] >= tmin and tup[0] <= tmax and tup[1] >= xmin and tup[1] <= xmax and tup[2] >= ymin and tup[
+            2] <= ymax:
             seqcc.remove(tup)
             if tup not in chunk.content:
-                chunk.content.add(tup)# add sequential content within a chunk
+                chunk.content.add(tup)  # add sequential content within a chunk
     return seqcc
 
 
-def identify_biggest_chunk(cg, seqc, checktype = 'full'):#_c_full
+def identify_biggest_chunk(cg, seqc, checktype='full'):  # _c_full
     '''Chunk with a bigger size is priorized to explain the sequence'''
     # check the occation when the seqc start at above 0, in which case it implies that
     # there are empty observations in certain time slices.
@@ -637,8 +728,8 @@ def identify_biggest_chunk(cg, seqc, checktype = 'full'):#_c_full
         pop_chunk_in_seq = pop_chunk_in_seq_full
     maxsizematch = 0
     maxchunk = None
-    for chunk in reversed(cg.chunks):# identify one chunk in sequence at one time...
-        matchsize, match_len = chunkidentification(chunk, seqc)# do the specific match by default
+    for chunk in reversed(cg.chunks):  # identify one chunk in sequence at one time...
+        matchsize, match_len = chunkidentification(chunk, seqc)  # do the specific match by default
         if matchsize > maxsizematch:
             maxsizematch = matchsize
             maxchunk = chunk.index
@@ -649,18 +740,18 @@ def identify_biggest_chunk(cg, seqc, checktype = 'full'):#_c_full
     else:
         seqc = pop_chunk_in_seq(maxchunk, seqc, cg)  # pop identified chunks in sequence
 
-    return maxchunk, seqc# strange, maxchunk is indeed an instance inside cg, a chunk inside cg
+    return maxchunk, seqc  # strange, maxchunk is indeed an instance inside cg, a chunk inside cg
 
 
-def identify_singleton_chunk(cg, seqc):#_c_
+def identify_singleton_chunk(cg, seqc):  # _c_
     chunkcontent = [seqc[0]]
-    chunk = Chunk(chunkcontent, H=cg.H, W=cg.W,pad = cg.pad)
+    chunk = Chunk(chunkcontent, H=cg.H, W=cg.W, pad=cg.pad)
     cg.add_chunk(chunk)
     return chunk.index, cg
 
 
-def updatechunk(chunk,explainchunk,chunk_record,cg, max_chunk_idx,t):
-    if chunk.abstraction==[]:
+def updatechunk(chunk, explainchunk, chunk_record, cg, max_chunk_idx, t):
+    if chunk.abstraction == []:
         explainchunk.append((chunk.index, int(chunk.T), list(cg.visible_chunk_list[chunk.index])))
         cg.chunks[chunk.index].update()  # update chunk count among the currently identified chunks
         chunk_record = updatechunkrecord(chunk_record, chunk.index, int(cg.chunks[chunk.index].T) + t, cg)
@@ -671,7 +762,7 @@ def updatechunk(chunk,explainchunk,chunk_record,cg, max_chunk_idx,t):
 
     chunk = cg.chunks[max_chunk_idx]
 
-    while chunk.abstraction!=[]:
+    while chunk.abstraction != []:
         for ck in chunk.abstraction:
             explainchunk.append((ck.index, int(ck.T), list(cg.visible_chunk_list[ck.index])))
             chunk_record = updatechunkrecord(chunk_record, ck.index, int(cg.chunks[ck.index].T) + t, cg)
@@ -680,9 +771,11 @@ def updatechunk(chunk,explainchunk,chunk_record,cg, max_chunk_idx,t):
 
     return
 
-def identify_one_chunk(cg, seqc, explainchunk, chunk_record, t): #_c_
-    max_chunk_idx, seqc = identify_biggest_chunk(cg, seqc) # identify and pop chunks in sequence
-    explainchunk, cg, chunk_record = updatechunk(cg.chunks[max_chunk_idx], explainchunk, chunk_record, cg, max_chunk_idx,t)
+
+def identify_one_chunk(cg, seqc, explainchunk, chunk_record, t):  # _c_
+    max_chunk_idx, seqc = identify_biggest_chunk(cg, seqc)  # identify and pop chunks in sequence
+    explainchunk, cg, chunk_record = updatechunk(cg.chunks[max_chunk_idx], explainchunk, chunk_record, cg,
+                                                 max_chunk_idx, t)
     # explainchunk.append((max_chunk_idx, int(cg.chunks[max_chunk_idx].T), list(cg.visible_chunk_list[max_chunk_idx])))
     # chunk_record = updatechunkrecord(chunk_record, max_chunk_idx, int(cg.chunks[max_chunk_idx].T) + t, cg)
     # cg.chunks[max_chunk_idx].update()  # update chunk count among the currently identified chunks
@@ -695,7 +788,7 @@ def pop_chunk_in_seq_approximate(chunk_idx, seqc, cg):
     print(' chunk content before ', chunk.content)
     print(' matching seq ', chunk.matching_seq)
 
-    chunk.average_content() # average content
+    chunk.average_content()  # average content
     print(' chunk content after ', chunk.content)
 
     cg.visible_chunk_list[chunk_idx] = chunk.content
@@ -714,7 +807,7 @@ def pop_chunk_in_seq_approximate(chunk_idx, seqc, cg):
 def identify_one_chunk_approximate(cg, seqc, explainchunk, chunk_record, t):
     maxsizematch = 0
     maxchunk = None
-    for chunk in reversed(cg.chunks):# identify one chunk in sequence at one time...
+    for chunk in reversed(cg.chunks):  # identify one chunk in sequence at one time...
         matchsize, match_len = check_chunk_in_seq_approximate(chunk, seqc)
         if matchsize > maxsizematch:
             maxsizematch = matchsize
@@ -729,23 +822,25 @@ def identify_one_chunk_approximate(cg, seqc, explainchunk, chunk_record, t):
 
     max_chunk_idx = maxchunk
     explainchunk.append((max_chunk_idx, int(cg.chunks[max_chunk_idx].T), list(cg.visible_chunk_list[max_chunk_idx])))
-    chunk_record = updatechunkrecord(chunk_record, max_chunk_idx, int(cg.chunks[max_chunk_idx].T) + t,cg)
+    chunk_record = updatechunkrecord(chunk_record, max_chunk_idx, int(cg.chunks[max_chunk_idx].T) + t, cg)
     cg.chunks[max_chunk_idx].update()  # update chunk count among the currently identified chunks
     return cg, seqc, chunk_record, explainchunk
 
 
-def check_seq_explained(seqc):#_c_
+def check_seq_explained(seqc):  # _c_
     # check whether there is a t = 0 in the seqc:
-    if seqc == []: return True
-    else: return seqc[0][0] != 0 # finished explaining the current time point
+    if seqc == []:
+        return True
+    else:
+        return seqc[0][0] != 0  # finished explaining the current time point
 
 
-def updatechunkrecord(chunk_record, ckidx,endtime,cg, freq = True):
+def updatechunkrecord(chunk_record, ckidx, endtime, cg, freq=True):
     if freq == True:
         if endtime not in list(chunk_record.keys()):
             chunk_record[endtime] = [(ckidx, cg.chunks[ckidx].count)]
         else:
-            if ckidx not in chunk_record[endtime]: # one chunk can only be identified at one time point. when there are
+            if ckidx not in chunk_record[endtime]:  # one chunk can only be identified at one time point. when there are
                 # multiple points that correspond to the same chunk, this chunk is identified as occurring once.
                 chunk_record[endtime].append((ckidx, cg.chunks[ckidx].count))
     else:
@@ -753,7 +848,7 @@ def updatechunkrecord(chunk_record, ckidx,endtime,cg, freq = True):
         if endtime not in list(chunk_record.keys()):
             chunk_record[endtime] = [(ckidx, p)]
         else:
-            if ckidx not in chunk_record[endtime]: # one chunk can only be identified at one time point. when there are
+            if ckidx not in chunk_record[endtime]:  # one chunk can only be identified at one time point. when there are
                 # multiple points that correspond to the same chunk, this chunk is identified as occurring once.
                 chunk_record[endtime].append((ckidx, p))
     return chunk_record
@@ -761,16 +856,20 @@ def updatechunkrecord(chunk_record, ckidx,endtime,cg, freq = True):
 
 def identify_latest_chunks(cg, seq, chunk_record, t):
     '''parse and store chunks in the chunkrecord '''
+
     def check_obs(s):  # there are observations at the current time point
-        if s == []: return True # in the case of empty sequence
-        else: return s[0][0] != 0 # nothing happens at the current time point
+        if s == []:
+            return True  # in the case of empty sequence
+        else:
+            return s[0][0] != 0  # nothing happens at the current time point
         # identify biggest chunks that finish at the earliest time point.
+
     seq_explained = False
     seqc = seq.copy()
     explainchunk = []
     # find candidate chunks explaining the upcoming sequence, out of these candidate chunks, find the ones that
     # terminates at the earliest time point.
-    no_observation = check_obs(seqc)# no observation in this particular time slice
+    no_observation = check_obs(seqc)  # no observation in this particular time slice
     if no_observation:
         current_chunks_idx = []
         dt = int(1.0)
@@ -779,37 +878,39 @@ def identify_latest_chunks(cg, seq, chunk_record, t):
             # find explanations for the upcoming sequence
             # record termination time of each biggest chunk used for explanation
             cg, seqc, chunk_record, explainchunk = identify_one_chunk(cg, seqc, explainchunk, chunk_record, t)
-            #cg, seqc, chunk_record, explainchunk = identify_one_chunk_approximate(cg, seqc, explainchunk, chunk_record, t)
+            # cg, seqc, chunk_record, explainchunk = identify_one_chunk_approximate(cg, seqc, explainchunk, chunk_record, t)
             seq_explained = check_seq_explained(seqc)
         # chunkrecord: {time: [chunkindex]} stores the finishing time (exclusive) of each chunk
         # explainchunk[(maxchunkindex, chunktimelength, chunkcontent)]
         # decide which are current chunks so that time is appropriately updated
-        explainchunk.sort(key=lambda tup: tup[1])# sort according to finishing time
-        if len(seqc)>=1:
+        explainchunk.sort(key=lambda tup: tup[1])  # sort according to finishing time
+        if len(seqc) >= 1:
             dt = min(min(explainchunk, key=lambda tup: tup[1])[1], seqc[0][0])
         else:
             dt = min(explainchunk, key=lambda tup: tup[1])[1]
-        current_chunks_idx = [item[0] for item in explainchunk if item[1] == dt] # move at the pace of the smallest identified chunk
+        current_chunks_idx = [item[0] for item in explainchunk if
+                              item[1] == dt]  # move at the pace of the smallest identified chunk
         seq = seqc
     return current_chunks_idx, cg, dt, seq, chunk_record
 
 
 def refactor(seq, current_chunk_idx, cg):
     # first, remove the identified current chunks from the sequence of observations
-    if len(current_chunk_idx)>0:
-        for idx,_ in current_chunk_idx:
+    if len(current_chunk_idx) > 0:
+        for idx, _ in current_chunk_idx:
             content = cg.chunks[idx].content
-            for tup in content:# remove chunk content one by one from the sequence
+            for tup in content:  # remove chunk content one by one from the sequence
                 seq.remove(tup)
 
     seqcopy = []
-    if seq !=[]:
+    if seq != []:
         mintime = seq[0][0]
         for item in seq:
             listobs = list(item)
             listobs[0] = int(listobs[0] - mintime)
             # if listobs[0]>=0:
-            seqcopy.append(tuple(listobs)) # there should not be negative ts, otherwise something is not explained properly
+            seqcopy.append(
+                tuple(listobs))  # there should not be negative ts, otherwise something is not explained properly
         return seqcopy
     else:
         return []
@@ -837,7 +938,6 @@ def check_subchunk_match_mtx(sequence_snapshot, chunk, size=False):
     # if returns 0, then there is a complete matching.
 
 
-
 def find_atomic_chunk(observation_to_explain):
     """:returns the first nonzero atomic unit"""
     H, W = observation_to_explain.shape[1:]
@@ -854,13 +954,13 @@ def rational_chunking(prev, current, combined_chunk, cg):
     """Updates chunking based on whether the new representation improves the evaluated loss function
         Updates the loss function associated with the new chunk, because the update of other chunks does not affect
         the loss function value estimation at the moment"""
-    w = 0.5 # tradeoff between accuracy and reaction time.
+    w = 0.5  # tradeoff between accuracy and reaction time.
     cat = combined_chunk
     chunked = False
     P_s_giv_s_last = cg.get_transitional_p(prev, current)
     if P_s_giv_s_last is not None:
         Expected_reward_cat = P_s_giv_s_last * len(current) + (1 - P_s_giv_s_last) * (-1) * w * len(current)
-        if Expected_reward_cat>0:
+        if Expected_reward_cat > 0:
             chunked = True
             cg.chunking_reorganization(prev, current, cat)
     return cg, chunked
@@ -871,8 +971,10 @@ def arr_to_tuple(arr):
     res = tuple([tuple([tuple(ele) for ele in sub]) for sub in test_list])
     return res
 
+
 def tuple_to_arr(tup):
     return np.array(tup)
+
 
 def refactor_observation(observation, return_max_k=False):
     ''' observation: matrix to refactor
@@ -901,7 +1003,6 @@ def check_chunk_ending(chunk, observation):
         return False
 
 
-
 def transition_into_probabilities(chunk_f, chunk_pair_f, prev, current):
     # decide if the number of exposure is significant enough to be concatinated together as a chunk
     if (prev in list(chunk_f.keys()) and prev in list(
@@ -924,13 +1025,14 @@ def transition_into_probabilities(chunk_f, chunk_pair_f, prev, current):
 def convert_sequence(seq):
     Observations = []
     T, H, W = seq.shape
-    for t in range(0,T):
-        for h in range(0,H):
-            for w in range(0,W):
-                v = seq[t,h,w]
-                if v!=0:
-                    Observations.append((t,h,w,seq[t,h,w]))
+    for t in range(0, T):
+        for h in range(0, H):
+            for w in range(0, W):
+                v = seq[t, h, w]
+                if v != 0:
+                    Observations.append((t, h, w, seq[t, h, w]))
     return Observations, T
+
 
 def save_chunk_record(chunkrecord, cg):
     import pickle
@@ -946,16 +1048,17 @@ def save_chunk_record(chunkrecord, cg):
         pickle.dump(df, f)
     return
 
-def hcm_learning(arayseq, cg, learn = True):
+
+def hcm_learning(arayseq, cg, learn=True):
     '''Sequence is an n-d array
         Note that sequence should not be too long, otherwise subtraction would take a while for the algorithm
         when the learning handle is false, then only parsing, and no chunking will take place '''
     seql, H, W = arayseq.shape
-    cg.update_hw(H,W)
+    cg.update_hw(H, W)
     seq_over = False
-    chunk_record = {} # chunk ending time, and which chunk is it.
+    chunk_record = {}  # chunk ending time, and which chunk is it.
 
-    seq, seql = convert_sequence(arayseq[0:1,:,:])# loaded with the 0th observation
+    seq, seql = convert_sequence(arayseq[0:1, :, :])  # loaded with the 0th observation
     t = 0
     Buffer = buffer(t, seq, seql, arayseq.shape[0])
     # seql: length of the current parsing buffer
@@ -963,11 +1066,12 @@ def hcm_learning(arayseq, cg, learn = True):
 
     while seq_over == False:
         # identify latest ending chunks
-        current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record, Buffer.t)  # chunks
+        current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record,
+                                                                               Buffer.t)  # chunks
         seq = Buffer.refactor(seq, dt)
 
         # that ends right before t. the last
-        if len(current_chunks_idx)>0 and learn == True:
+        if len(current_chunks_idx) > 0 and learn == True:
             cg = learning_and_update(current_chunks_idx, chunk_record, cg, Buffer.t)
         # previous and current chunk
         if learn == True:
@@ -977,19 +1081,52 @@ def hcm_learning(arayseq, cg, learn = True):
         seq_over = Buffer.checkseqover()
     return cg, chunk_record
 
-def reload(seq, seql, arraysequence,t, max_chunksize):
+
+def hcm_rational(arayseq, cg,maxIter=20):
+    '''Rational Learning
+       Chunking happens every parse through the sequence. '''
+    seql, H, W = arayseq.shape
+    cg.update_hw(H, W)
+    seq_over = False
+    chunk_record = {}  # chunk ending time, and which chunk is it.
+
+    seq, seql = convert_sequence(arayseq[0:1, :, :])  # loaded with the 0th observation
+
+    t = 0
+    Buffer = buffer(t, seq, seql, arayseq.shape[0])
+    # seql: length of the current parsing buffer
+    maxchunksize = 0
+    Iter = 0
+    independence = False
+    while independence == False and Iter<=maxIter:
+        while seq_over == False:
+            # identify latest ending chunks
+            current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record,
+                                                                                   Buffer.t)  # chunks
+            cg = learning_and_update(current_chunks_idx, chunk_record, cg, Buffer.t, learn = False)
+            seq = Buffer.refactor(seq, dt)
+            Buffer.reloadsize = maxchunksize + 1
+            Buffer.checkreload(arayseq)
+            seq_over = Buffer.checkseqover()
+        independence.
+        cg = rational_learning()
+
+    return cg, chunk_record
+
+
+def reload(seq, seql, arraysequence, t, max_chunksize):
     # reload arraysequence starting from time point t to the set sequence representations
     # t: the current time point
-    T = seql # current buffer length
+    T = seql  # current buffer length
     time = t + T
-    relevantarray = arraysequence[time:time+max_chunksize, :, :]
+    relevantarray = arraysequence[time:time + max_chunksize, :, :]
     _, H, W = arraysequence.shape
-    for tt in range(0, min(max_chunksize,relevantarray.shape[0])):
-        for h in range(0,H):
-            for w in range(0,W):
-                v = relevantarray[tt,h,w]
+    for tt in range(0, min(max_chunksize, relevantarray.shape[0])):
+        for h in range(0, H):
+            for w in range(0, W):
+                v = relevantarray[tt, h, w]
                 seq.append((T + tt, h, w, v))
-    seql = seql + min(max_chunksize,relevantarray.shape[0])
+    seql = seql + min(max_chunksize, relevantarray.shape[0])
     return seq, seql
 
 
@@ -1003,7 +1140,7 @@ def learn_stc_classes(sequence, cg):
      """
     previous_chunk_boundary_record = []
     H, W = sequence.shape[1:]
-    cg.update_hw(H,W)
+    cg.update_hw(H, W)
     cg.generate_empty()
 
     chunk_termination_time = -1 * np.ones([H, W])
@@ -1011,48 +1148,48 @@ def learn_stc_classes(sequence, cg):
     for t in range(0, total_time):  # goes with the order of time.
         chunk_termination_time = chunk_termination_time.astype(int)
 
-        if np.sum(np.abs(sequence[t,:,:])) > 0:
+        if np.sum(np.abs(sequence[t, :, :])) > 0:
             current_chunks, cg, chunk_termination_time, \
-            previous_chunk_boundary_record = identify_chunks(cg,sequence[0:t + 1,:, :], \
-            chunk_termination_time,t,previous_chunk_boundary_record)  # chunks that ends right before t. the last
+            previous_chunk_boundary_record = identify_chunks(cg, sequence[0:t + 1, :, :], \
+                                                             chunk_termination_time, t,
+                                                             previous_chunk_boundary_record)  # chunks that ends right before t. the last
 
         else:
-            cg.update_empty(1) # update empty observation througout the iteration process
-            current_chunks = set() # no chunks ending at the current point
+            cg.update_empty(1)  # update empty observation througout the iteration process
+            current_chunks = set()  # no chunks ending at the current point
             previous_chunk_boundary_record.append(current_chunks)
 
         chunk_termination_time, cg = learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record,
-                                                         chunk_termination_time, cg)
+                                                             chunk_termination_time, cg)
         # previous and current chunk
         cg.forget()
     return cg
 
 
-def independence_test(pM, pT,N):
+def independence_test(pM, pT, N):
     # f_obs, f_exp = None, ddof = 0
     f_obs = []
     f_exp = []
     B = list(pM.keys())
     for cl in B:
         for cr in B:
-            pclcr = pM[cl]*pM[cr]*N # expected number of observations
-            oclcr = pM[cl]*pT[cl][cr]*N # number of observations
+            pclcr = pM[cl] * pM[cr] * N  # expected number of observations
+            oclcr = pM[cl] * pT[cl][cr] * N  # number of observations
             f_exp.append(pclcr)
             f_obs.append(oclcr)
-    df = (len(B) - 1)**2
-    _,pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
+    df = (len(B) - 1) ** 2
+    _, pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
 
     if pvalue < 0.05:
-        return False # reject independence hypothesis, there is a correlation
+        return False  # reject independence hypothesis, there is a correlation
     else:
         return True
 
 
 def get_minimal_complete_cks(seq, cg):
-
     for i in range(0, seq.shape[0]):
         atomic_chunk = np.zeros([1, 1, 1])
-        atomic_chunk[0,0,0] = seq[i, 0, 0]
+        atomic_chunk[0, 0, 0] = seq[i, 0, 0]
         if arr_to_tuple(atomic_chunk) not in list(cg.M.keys()):
             cg.M[arr_to_tuple(atomic_chunk)] = 1
             cg.T[arr_to_tuple(atomic_chunk)] = {}
@@ -1063,34 +1200,36 @@ def get_minimal_complete_cks(seq, cg):
     return cg
 
 
-def rational_chunking_all_info(seq, cg, maxit = 4):
+def rational_chunking_all_info(seq, cg, maxit=4):
     """" Rational chunk learner with the access to information about all the sequence
     Implemented in the hierarchical spatial temporal sequence
     """
-    def hypothesis_test(cl,cr,pM,pT,N):
-        p1p1 = pM[cl]*pM[cr]
-        p1p0 = pM[cl]*(1 - pM[cr])
-        p0p1 = (1 - pM[cl])*pM[cr]
-        p0p0 = (1 - pM[cl])*(1 - pM[cr])
 
-        op1p1 = pM[cl]*pT[cl][cr]
-        op1p0 = pM[cl]*(1 - pT[cl][cr])
+    def hypothesis_test(cl, cr, pM, pT, N):
+        p1p1 = pM[cl] * pM[cr]
+        p1p0 = pM[cl] * (1 - pM[cr])
+        p0p1 = (1 - pM[cl]) * pM[cr]
+        p0p0 = (1 - pM[cl]) * (1 - pM[cr])
+
+        op1p1 = pM[cl] * pT[cl][cr]
+        op1p0 = pM[cl] * (1 - pT[cl][cr])
         op0p1 = 0
         op0p0 = 0
 
         for ncl in list(pT.keys()):
             if ncl != cl:
-                op0p1 = op0p1 + pT[ncl][cr]*pM[ncl]
-                op0p0 = op0p0 + (1-pT[ncl][cr])*pM[ncl]
+                op0p1 = op0p1 + pT[ncl][cr] * pM[ncl]
+                op0p0 = op0p0 + (1 - pT[ncl][cr]) * pM[ncl]
         # if any cell contains less than 5 observations, need to
-        if op0p0*N <=5 or op1p1*N <=5 or op1p0*N <=5 or op0p1*N <=5:
-            return True# cannot continute the test because of lack of sample size
+        if op0p0 * N <= 5 or op1p1 * N <= 5 or op1p0 * N <= 5 or op0p1 * N <= 5:
+            return True  # cannot continute the test because of lack of sample size
 
-        chisquare = N*(p1p1*((op1p1 - p1p1)/p1p1)**2 + p1p0*((op1p0 - p1p0)/p1p0)**2 + p0p1*((op0p1 - p0p1)/p0p1)**2
-                       + p0p0*((op0p0 - p0p0)/p0p0)**2)
+        chisquare = N * (p1p1 * ((op1p1 - p1p1) / p1p1) ** 2 + p1p0 * ((op1p0 - p1p0) / p1p0) ** 2 + p0p1 * (
+                    (op0p1 - p0p1) / p0p1) ** 2
+                         + p0p0 * ((op0p0 - p0p0) / p0p0) ** 2)
         pvalue = stats.chi2.pdf(chisquare, 1)
         if pvalue < 0.0005:
-            return False # reject independence hypothesis, there is a correlation
+            return False  # reject independence hypothesis, there is a correlation
         else:
             return True
 
@@ -1098,8 +1237,8 @@ def rational_chunking_all_info(seq, cg, maxit = 4):
     if len(cg.M) == 0:
         cg = get_minimal_complete_cks(seq, cg)
 
-    if len(cg.M)>0:
-        pM, pT, _,N = partition_seq_hastily(seq, list(cg.M.keys()))
+    if len(cg.M) > 0:
+        pM, pT, _, N = partition_seq_hastily(seq, list(cg.M.keys()))
 
     proposed_chunk_p = {}
     for cl in list(pT.keys()):
@@ -1108,15 +1247,15 @@ def rational_chunking_all_info(seq, cg, maxit = 4):
             cr_giv_cl = pT[cl][cr]
             p = p_cl * cr_giv_cl
             # check independence:
-            if hypothesis_test(cl,cr,pM,pT,N) == False: # there is a correlation
-                if np.sum(tuple_to_arr(cl))>0 and np.sum(tuple_to_arr(cr))>0:
+            if hypothesis_test(cl, cr, pM, pT, N) == False:  # there is a correlation
+                if np.sum(tuple_to_arr(cl)) > 0 and np.sum(tuple_to_arr(cr)) > 0:
                     clcr = arr_to_tuple(np.concatenate((tuple_to_arr(cl), tuple_to_arr(cr)), axis=0))
                     proposed_chunk_p[clcr] = (cl, cr, p)
     sorted_proposal = {k: v for k, v in sorted(proposed_chunk_p.items(), key=lambda item: item[1][2])}
 
     # find the maximum transition probability, try chunking it
     it = 0  # number of iteration
-    while independence_test(pM, pT,N) == False and len(list(sorted_proposal.keys())) > 0:
+    while independence_test(pM, pT, N) == False and len(list(sorted_proposal.keys())) > 0:
         new_chunk = list(sorted_proposal.keys())[-1]
         cl = sorted_proposal[new_chunk][0]
         cr = sorted_proposal[new_chunk][1]
@@ -1130,10 +1269,10 @@ def rational_chunking_all_info(seq, cg, maxit = 4):
             cl = sorted_proposal[new_chunk][0]
             cr = sorted_proposal[new_chunk][1]
 
-        cg.add_chunk_to_vertex(new_chunk, left= cl, right = cr)
+        cg.add_chunk_to_vertex(new_chunk, left=cl, right=cr)
         new_bag_of_chunks = bag_of_chunks.copy()
         new_bag_of_chunks.append(new_chunk)
-        new_pM, new_pT,_,N = partition_seq_hastily(seq, new_bag_of_chunks)
+        new_pM, new_pT, _, N = partition_seq_hastily(seq, new_bag_of_chunks)
         pM = new_pM
         pT = new_pT
         cg.M = new_pM
@@ -1152,16 +1291,14 @@ def rational_chunking_all_info(seq, cg, maxit = 4):
         sorted_proposal = {k: v for k, v in sorted(proposed_chunk_p.items(), key=lambda item: item[1][2])}
 
         it = it + 1
-        if it > maxit or len(list(sorted_proposal.keys())) == 0:# in case there is no proposal, exit.
+        if it > maxit or len(list(sorted_proposal.keys())) == 0:  # in case there is no proposal, exit.
             break
 
     return cg
 
 
-
 # helper functions
-def eval_pM_pT(bag_of_chunks,partitioned_sequence, freq = True):
-
+def eval_pM_pT(bag_of_chunks, partitioned_sequence, freq=True):
     """checked"""
     M = {}
     T = {}
@@ -1178,7 +1315,7 @@ def eval_pM_pT(bag_of_chunks,partitioned_sequence, freq = True):
     return M, T
 
 
-def get_pT_from_partitioned_sequence(cl, cr, partitioned_sequence, freq = True):
+def get_pT_from_partitioned_sequence(cl, cr, partitioned_sequence, freq=True):
     '''checked'''
     '''Get the estimated empirical probability of P(chunk2|chunk1),the probability of chunk2 followed by chunk1, 
     in the generated sequence
@@ -1206,7 +1343,7 @@ def get_pT_from_partitioned_sequence(cl, cr, partitioned_sequence, freq = True):
             return 0.0  # returns 0 if there is no occurrance for the first probabilility
 
 
-def get_pM_from_partitioned_sequence(chunk, partitioned_sequence, freq = True):
+def get_pM_from_partitioned_sequence(chunk, partitioned_sequence, freq=True):
     '''Get the estimated empirical probability of P(chunk),the probability of chunk2 followed by chunk1, 
     in the generated sequence
     In the case when chunk1 never occurs, output the probability of 0 '''
@@ -1223,8 +1360,7 @@ def get_pM_from_partitioned_sequence(chunk, partitioned_sequence, freq = True):
             return 0.0
 
 
-
-def partition_seq_hastily(this_sequence, bag_of_chunks, freq = False):
+def partition_seq_hastily(this_sequence, bag_of_chunks, freq=False):
     """Parse the sequence using the learned set of chunks, use the maximal chunk that fits the upcoming sequence,
     as described by the rational chunking model in the paper,
     only works for one dimensional chunks"""
@@ -1241,9 +1377,9 @@ def partition_seq_hastily(this_sequence, bag_of_chunks, freq = False):
         for chunk in bag_of_chunks:
             this_chunk = tuple_to_arr(chunk)
             len_this_chunk = this_chunk.shape[0]
-            if i+len_this_chunk<lsq:
-                if np.isclose(this_sequence[i:i+len_this_chunk, :, :], this_chunk).all():
-                    if len_this_chunk>=mxl:
+            if i + len_this_chunk < lsq:
+                if np.isclose(this_sequence[i:i + len_this_chunk, :, :], this_chunk).all():
+                    if len_this_chunk >= mxl:
                         mxl = len_this_chunk
                         mxck = this_chunk
         if mxck is None:
@@ -1257,7 +1393,7 @@ def partition_seq_hastily(this_sequence, bag_of_chunks, freq = False):
     return this_pM, this_pT, partitioned_sequence, N
 
 
-def evaluate_KL_compared_to_ground_truth(reproduced_sequence, generative_marginals,cg):
+def evaluate_KL_compared_to_ground_truth(reproduced_sequence, generative_marginals, cg):
     """generative_marginal: marginals used in generating ground truth """
     """ Epsilon is used here to avoid conditional code for
     checking that neither P nor Q is equal to 0. """
@@ -1265,8 +1401,8 @@ def evaluate_KL_compared_to_ground_truth(reproduced_sequence, generative_margina
     for chunk in generative_marginals.keys():
         cg.M[chunk] = 0
 
-    learned_M, _, _,N = partition_seq_hastily(reproduced_sequence, list(cg.M.keys()))
-    #learned_M = partition_seq_STC(reproduced_sequence, cg) # in this
+    learned_M, _, _, N = partition_seq_hastily(reproduced_sequence, list(cg.M.keys()))
+    # learned_M = partition_seq_STC(reproduced_sequence, cg) # in this
 
     # compare the learned M with the generative marginals
     # Iterate over dictionary keys, and add key values to the np.array to be compared
@@ -1279,24 +1415,19 @@ def evaluate_KL_compared_to_ground_truth(reproduced_sequence, generative_margina
     probability_learned = np.array(probability_learned)
     probability_ground_truth = np.array(probability_ground_truth)
     eps = 0.000000001
-    EPS = np.ones(probability_ground_truth.shape)*eps
+    EPS = np.ones(probability_ground_truth.shape) * eps
     # return divergence
 
-    v_M1 = probability_ground_truth# input, q
-    v_M1 = EPS + v_M1 # take out the protection to see what happens
-    v_M2 = probability_learned # output p
+    v_M1 = probability_ground_truth  # input, q
+    v_M1 = EPS + v_M1  # take out the protection to see what happens
+    v_M2 = probability_learned  # output p
     v_M2 = EPS + v_M2
 
     # calculate the kl divergence
-    def kl_divergence(p, q):# usually, p is the output, and q is the input.
-        return sum(p[i] * np.log2(p[i] / q[i]) for i in range(len(p))) # KL divergence in units of bits.
+    def kl_divergence(p, q):  # usually, p is the output, and q is the input.
+        return sum(p[i] * np.log2(p[i] / q[i]) for i in range(len(p)))  # KL divergence in units of bits.
 
-    #p_log_p_div_q = np.multiply(v_M1,np.log(v_M1/v_M2)) # element wise multiplication
-    KL = kl_divergence(v_M2,v_M1)
+    # p_log_p_div_q = np.multiply(v_M1,np.log(v_M1/v_M2)) # element wise multiplication
+    KL = kl_divergence(v_M2, v_M1)
     # div = np.sum(np.matmul(v_M1.transpose(),p_log_p_div_q))
     return KL
-
-
-
-
-

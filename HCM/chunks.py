@@ -237,6 +237,17 @@ class Chunk:
             self.adjacency[dt][chunkidx] = 1
         return
 
+    def empty_counts(self):
+        # empty
+        self.count = 0
+        self.birth = None # chunk creation time
+        # empty transitional counts
+        for dt in list(self.adjacency.keys()):
+            for chunkidx in list(self.adjacency[dt].keys()):
+                self.adjacency[dt][chunkidx] = 0
+        return
+
+
     def contentagreement(self, content):
         if len(self.content) != len(content):
             return False

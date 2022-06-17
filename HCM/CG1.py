@@ -3,6 +3,8 @@ from chunks import *
 import numpy as np
 import copy
 
+# TODO: add representation evaluation
+
 class CG1:
     """
     Attributes
@@ -48,6 +50,19 @@ class CG1:
         for ck in self.chunks:
             N = N + ck.count
         return N
+
+    def empty_counts(self):
+        # empty count entries in each chunk
+        for ck in self.chunks:
+            ck.count = 0
+            ck.emptycounts()
+        return
+
+    def eval_avg_encoding_len(self):
+        #
+        return
+
+
 
     def observation_to_tuple(self,relevant_observations):
         """relevant_observations: array like object"""

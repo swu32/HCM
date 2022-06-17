@@ -330,6 +330,34 @@ def fmri():
     return
 
 
+def rationalfmri():
+    import numpy as np
+    with open('./fmri_timeseries/timeseries.npy', 'rb') as f:
+        whole_time_series = np.load(f)
+    subject_learned_chunk = []
+    for i in range(0, 1):#whole_time_series.shape[0]):
+        time_series = whole_time_series[i,:,:]
+        seq = time_series.astype(int).reshape(time_series.shape + (1,))
+        cg = CG1(DT=0.1, theta=1.0, pad=40)  # initialize chunking part with specified parameters
+        cg, chunkrecord = hcm_learning(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
+        cg.save_graph(name='subject' + str(i), path='./fmri_chunk_data/')
+
+        # store chunks learned by cg
+        learned_chunk = []
+        for ck in cg.chunks:
+            # record all the chunks
+            ck.to_array()
+            chunk_array = ck.arraycontent
+            freq = ck.count
+            learned_chunk.append((chunk_array, freq))
+        subject_learned_chunk.append([learned_chunk, chunkrecord])
+
+    with open('./fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
+        np.save(f, subject_learned_chunk)
+
+    return
+
+
 def visual_chunks():
     cg_gt = compositional_imgs()
     n = 2000
