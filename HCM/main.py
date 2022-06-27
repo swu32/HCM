@@ -61,7 +61,7 @@ def measure_KL():
                 df['type'].append('nn')
 
     df = pd.DataFrame.from_dict(df)
-    df.to_pickle('KL_rational_learning_N')  # where to save it, usually as a .pkl
+    df.to_pickle('../OutputData/KL_rational_learning_N')  # where to save it, usually as a .pkl
     return df
 
 
@@ -133,7 +133,7 @@ def c3_RNN():
     # df = pd.DataFrame.from_dict(df)
 
     import pickle
-    with open('c3_RNN.pkl', 'wb') as f:
+    with open('../OutputData/c3_RNN.pkl', 'wb') as f:
         pickle.dump(df, f)
     return
 
@@ -193,7 +193,7 @@ def NN_data_record():
             print({'kl is ': kl})
 
     df = pd.DataFrame.from_dict(df)
-    df.to_pickle('../KL_neural_network_N')  # where to save it, usually as a .pkl
+    df.to_pickle('../OutputData/KL_neural_network_N')  # where to save it, usually as a .pkl
     return
 
 
@@ -293,7 +293,7 @@ def squidgifmoving():
 
             gif_chunk = (255.0 / gif_chunk.max() * (gif_chunk - gif_chunk.min())).astype(np.uint8)
             im = Image.fromarray(gif_chunk)
-            name = './gifsquid/' + str(k) + '|-' + str(p) + '.png'
+            name = '../OutputData/gifsquid/' + str(k) + '|-' + str(p) + '.png'
             im.save(name)
 
     return
@@ -301,7 +301,7 @@ def squidgifmoving():
 
 def fmri():
     import numpy as np
-    with open('./fmri_timeseries/timeseries.npy', 'rb') as f:
+    with open('../InputData/fmri_timeseries/timeseries.npy', 'rb') as f:
         whole_time_series = np.load(f)
     subject_learned_chunk = []
     for i in range(0, whole_time_series.shape[0]):
@@ -324,7 +324,7 @@ def fmri():
             learned_chunk.append((chunk_array, freq))
         subject_learned_chunk.append([learned_chunk, chunkrecord])
 
-    with open('./fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
+    with open('../OutputData/fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
         np.save(f, subject_learned_chunk)
 
     return
@@ -332,7 +332,7 @@ def fmri():
 
 def rationalfmri():
     import numpy as np
-    with open('./fmri_timeseries/timeseries.npy', 'rb') as f:
+    with open('../InputData/fmri_timeseries/timeseries.npy', 'rb') as f:
         whole_time_series = np.load(f)
     subject_learned_chunk = []
     for i in range(0, 1):#whole_time_series.shape[0]):
@@ -352,7 +352,7 @@ def rationalfmri():
             learned_chunk.append((chunk_array, freq))
         subject_learned_chunk.append([learned_chunk, chunkrecord])
 
-    with open('./fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
+    with open('../OutputData/fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
         np.save(f, subject_learned_chunk)
 
     return
@@ -402,10 +402,10 @@ def c3_chunk_learning():
             df['ID'].append(ID)
             chunk = get_chunk_list(cg.chunks[ckidx])
             hcm_chunk_record[ID].append(chunk)
-    with open('HCM_time_chunksize.pkl', 'wb') as f:
+    with open('../OutputData/HCM_time_chunksize.pkl', 'wb') as f:
         pickle.dump(df, f)
 
-    with open('HCM_chunk.pkl', 'wb') as f:
+    with open('../OutputData/HCM_chunk.pkl', 'wb') as f:
         pickle.dump(hcm_chunk_record, f)
 
     return
@@ -446,7 +446,7 @@ def prob_hcm_rnn():
         data['seq'] += trainingseq
         data['rt'] += list(dfsubject[dfsubject['id'] == subj]['timecollect'])[200:800]
 
-        with open('hcm_rnn_rt_p_test.pkl', 'wb') as f:
+        with open('../OutputData/hcm_rnn_rt_p_test.pkl', 'wb') as f:
             pickle.dump(data, f)
     return
 
@@ -523,7 +523,7 @@ def transferinterferenceexperiment():
             df['type'] = df['type'] + ['trained', 'naive', 'trained', 'naive']
 
     dff = pd.DataFrame.from_dict(df)
-    dff.to_csv('TransferExperiment')
+    dff.to_csv('../OutputData/TransferExperiment')
     return
 
 def model_comparison_HCM_RNN():

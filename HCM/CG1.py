@@ -108,7 +108,7 @@ class CG1:
             chunk.to_array()
         return
 
-    def save_graph(self, name = '', path = ''):
+    def save_graph(self, name = '', path = '../OutputData/'):
         import json
         '''save graph configuration for visualization'''
         chunklist = []
@@ -123,7 +123,6 @@ class CG1:
         a_file = open(Name, "w")
         json.dump(data, a_file)
         a_file.close()
-        # np.save(name +'graphchunk.npy', chunklist, allow_pickle=True)
         return
 
     def add_chunk(self, newc, leftidx= None, rightidx = None):
