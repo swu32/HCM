@@ -1,8 +1,7 @@
 # ignore Mac system files
 .DS_Store
-/HCM/.idea/
-.ipynb_checkpoints/
-
-/HCM/__pycache__/
-/HCM/venv/
+./HCM/.idea/
+./.ipynb_checkpoints/
+./HCM/__pycache__/
+./HCM/venv/
 
