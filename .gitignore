@@ -1,3 +1,7 @@
+# ignore Mac system files
+.DS_store
+
+
 /HCM/__pycache__/
 /HCM/venv/
 
