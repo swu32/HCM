@@ -254,5 +254,12 @@ class Chunk:
         else: # sizes are the same
             return len(self.content.intersection(content)) == len(content)
 
-
-
+    def get_transition(self, cridx):
+        """ number of occurrence transitioning from chunk to cridx """
+        if self.adjacency == {}: return 0
+        else:
+            nt = 0
+            for dt in list(self.adjacency.keys()):
+                if cridx in list(self.adjacency[dt].keys()):
+                    nt = nt + self.adjacency[dt][cridx]
+            return nt

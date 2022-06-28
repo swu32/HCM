@@ -55,12 +55,21 @@ class CG1:
         # empty count entries in each chunk
         for ck in self.chunks:
             ck.count = 0
-            ck.emptycounts()
+            ck.empty_counts()
         return
 
     def eval_avg_encoding_len(self):
         #
         return
+
+    def getmaxchunksize(self):
+        maxchunksize = 0
+        if len(self.chunks)>0:
+            for ck in self.chunks:
+                if ck.volume > maxchunksize:
+                    maxchunksize = ck.volume
+
+        return maxchunksize
 
 
 
@@ -203,13 +212,22 @@ class CG1:
 
     def checkcontentoverlap(self, content):
         '''check of the content is already contained in one of the chunks'''
+
         for chunk in self.chunks:
             if chunk.contentagreement(content):#
                 return chunk
         return None
 
     def chunking_reorganization(self, previdx, currentidx, cat, dt):
-        ''' Reorganize marginal and transitional probability matrix when a new chunk is created by concatinating prev and current '''
+        """ Reorganize marginal and transitional when a new chunk is created
+                Parameters:
+                        previdx (int): idx of the previous chunk
+                        currentidx (int): idx of the current chunk
+                        cat (Chunk): concatinated chunk
+                        dt: time difference of the end of the previous chunk to the start of the next chunk
+                Returns:
+                    """
+
         prev = self.chunks[previdx]
         current = self.chunks[currentidx]
         chunk = self.checkcontentoverlap(cat.content)
@@ -217,7 +235,7 @@ class CG1:
             self.add_chunk(cat, leftidx=previdx, rightidx=currentidx)# add concatinated chunk to the network
             cat.count = prev.adjacency[dt][currentidx]# need to add estimates of how frequent the joint frequency occurred
             cat.adjacency = copy.deepcopy(current.adjacency)
-            # iterate through chunk organization to see if there are other pathways that arrive at the same chunk
+            # iterate through chunk organization find alternative paths arriving at the same chunk
             for _prevck in self.chunks:
                 _previdx = _prevck.index
                 for _dt in list(_prevck.adjacency.keys()):
@@ -231,9 +249,13 @@ class CG1:
                                     self.chunks[_previdx].adjacency[_dt][_postidx] = 0
         else:
             chunk.count = chunk.count + prev.adjacency[dt][currentidx]
+
         prev.adjacency[dt][currentidx] = 0
-        prev.count = prev.count - 1
-        current.count = current.count - 1
+
+        if prev.count - 1 > 0:
+            prev.count = prev.count - 1
+        if current.count - 1 > 0:
+            current.count = current.count - 1
         return
 
     def set_variable_adjacency(self, variable, entailingchunks):
@@ -248,4 +270,71 @@ class CG1:
                     transition[_dt] = transition[_dt] + ck.adjacency[_dt]
         variable.adjacency = transition
         return
+
+    def independence_test(self, threshold=0.05):
+        """Test if the current set of chunks are independent in sequences"""
+        N = self.get_N()
+        f_obs = []
+        f_exp = []
+        for clidx in range(0, len(self.chunks)):
+            cl = self.chunks[clidx]
+            pMcl = cl.count/N
+            for cridx in range(0,len(self.chunks)):
+                cr = self.chunks[cridx]
+                pMcr = cr.count/N
+                # the number of times cl transition to cr
+                if cl.count == 0:
+                    return True
+                else:
+                    pTclcr = cl.get_transition(cridx)/cl.count
+                    pclcr = pMcl * pMcr * N  # expected number of observations
+                    oclcr = pMcl * pTclcr * N  # number of observations
+
+                    f_exp.append(pclcr)
+                    f_obs.append(oclcr)
+        df = (len(self.chunks) - 1) ** 2
+        _, pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
+
+        if pvalue < threshold:
+            return False  # reject independence hypothesis, there is a correlation
+        else:
+            return True
+
+    def hypothesis_test(self,clidx, cridx, dt, threshold = 0.05):
+        """independence test on a pair of indexed chunks separated with a time interval dt
+            returns True when the chunks are independent or when there is not enough data"""
+        cl = self.chunks[clidx]
+        cr = self.chunks[cridx]
+        assert len(cl.adjacency) > 0
+        assert dt in list(cl.adjacency.keys())
+        n = self.get_N()
+
+        if cr.count == 0 or (n - cr.count) == 0:
+            return True # not enough data
+
+        # Expected
+        ep1p1 = cl.count / n * cr.count
+        ep1p0 = cl.count / n * (n - cr.count)
+        ep0p1 = (n - cl.count) / n * cr.count
+        ep0p0 = (n - cl.count) / n * (n - cr.count)
+
+        # Observed
+        op1p1 = cl.adjacency[dt][cridx]
+        op1p0 = cl.get_N_transition(dt) - cl.adjacency[dt][cridx]
+        op0p1 = 0
+        op0p0 = 0
+        for ncl in list(self.chunks):  # iterate over p0, which is the cases where cl is not observed
+            if ncl != cl:
+                if dt in list(ncl.adjacency.keys()):
+                    if cridx in list(ncl.adjacency[dt].keys()):
+                        op0p1 = op0p1 + ncl.adjacency[dt][cridx]
+                        for ncridx in list(ncl.adjacency[dt].keys()):
+                            if ncridx != cr:
+                                op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
+
+        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        if pvalue < threshold:
+            return False  # reject independence hypothesis, there is a correlation
+        else:
+            return True
 

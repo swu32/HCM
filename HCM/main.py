@@ -14,11 +14,8 @@ from time import time
 from chunks import *
 
 
-def measure_KL():
-    '''Measurement of kl divergence across learning progress
-    n_sample: number of samples used for a particular uncommital generative model
-    d: depth of the generative model
-    n: length of the sequence used to train the learning model'''
+def convergence_hierarchy():
+    """Experiment on how learning convergence with increasing hierarchy depth"""
 
     df = {}
 
@@ -26,10 +23,10 @@ def measure_KL():
     df['kl'] = []
     df['type'] = []
     df['d'] = []
-    n_sample = 1  # eventually, take 100 runs to show such plots
+    n_sample = 50 #number of samples used for a particular uncommital generative model
     n_atomic = 5
-    ds = [3, 4, 5, 6, 7, 8]
-    Ns = np.arange(100,3000,100)
+    ds = [3, 4, 5, 6, 7, 8] # depth of the generative model
+    Ns = np.arange(100, 3000, 100)
     for d in ds: # varying depth, and the corresponding generative model it makes
         depth = d
         for i in range(0, n_sample):
@@ -45,7 +42,7 @@ def measure_KL():
                 imagined_seq = cg.imagination(n, sequential=True, spatial=False, spatial_temporal=False)
                 kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
 
-                imagined_seq = NN_testing(seq)
+                imagined_seq = NN_testing(seq) # comparison with an RNN
                 imagined_seq = np.array(imagined_seq).reshape([len(imagined_seq), 1, 1])
                 klnn = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
 
@@ -67,7 +64,6 @@ def measure_KL():
 
 def NN_testing(sequence):
     '''Input: sequence of a certain size that the NN is used then to train'''
-    ################ doing neural network testing here #############
     # convert the sequence into lists
 
     # Ns = np.arange(50, 3000, 50)# the length of sequence decided to show neural networks
@@ -85,13 +81,7 @@ def NN_testing(sequence):
     return imaginary_sequence
 
 def c3_RNN():
-
-    import pickle
-    # with open('c3_RNN.pkl', 'wb') as f:
-    #     pickle.dump(df, f)
-    # need a list of prediction and output probability.
-    # train until the next mistake.
-    '''Compare neural network behavior with human on chunk prediction'''
+    """Compare neural network behavior with human on chunk prediction"""
     sequence = np.array(generateseq('c3', seql=800)).reshape((800,1,1))
     sequence[0,:,:] = 0
     #sequence = np.array(generateseq('c3', seql=600)).reshape((600, 1, 1))
@@ -126,11 +116,6 @@ def c3_RNN():
     df['prob'] = prob
     df['id'] = ID
     df['learning_rate'] = learning_rate
-    #
-    # with open('c3_RNN.npy', 'wb') as f:
-    #     np.save(f, [predicted_seq, prob])
-
-    # df = pd.DataFrame.from_dict(df)
 
     import pickle
     with open('../OutputData/c3_RNN.pkl', 'wb') as f:
@@ -196,15 +181,9 @@ def NN_data_record():
     df.to_pickle('../OutputData/KL_neural_network_N')  # where to save it, usually as a .pkl
     return
 
-
-# helper function to read gif
 def readGif(filename, asNumpy=True):
-    """ readGif(filename, asNumpy=True)
-
-    Read images from an animated GIF file.  Returns a list of numpy
-    arrays, or, if asNumpy is false, a list if PIL images.
-
-    """
+    """ Read images from an animated GIF file.  Returns a list of numpy
+    arrays, or, if asNumpy is false, a list of PIL images."""
 
     # Check PIL
     if PIL is None:
@@ -251,6 +230,7 @@ def readGif(filename, asNumpy=True):
 
 
 def squidgifmoving():
+    """Experiment on semi-realistic stimuli learning chunks from moving gif sequences"""
     gifarray = readGif('./gif_data/octo_25.gif')
     # this function loads gifs into a list of np arrays
     T = len(gifarray)
@@ -300,6 +280,7 @@ def squidgifmoving():
 
 
 def fmri():
+    """Experiment on learning hierarchies of chunks from fMRI data """
     import numpy as np
     with open('../InputData/fmri_timeseries/timeseries.npy', 'rb') as f:
         whole_time_series = np.load(f)
@@ -339,7 +320,7 @@ def rationalfmri():
         time_series = whole_time_series[i,:,:]
         seq = time_series.astype(int).reshape(time_series.shape + (1,))
         cg = CG1(DT=0.1, theta=1.0, pad=40)  # initialize chunking part with specified parameters
-        cg, chunkrecord = hcm_learning(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
+        cg, chunkrecord = hcm_rational(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
         cg.save_graph(name='subject' + str(i), path='./fmri_chunk_data/')
 
         # store chunks learned by cg
@@ -359,13 +340,14 @@ def rationalfmri():
 
 
 def visual_chunks():
+    """Experiment on compositional visual stimuli with embedded hierarchy"""
     cg_gt = compositional_imgs()
     n = 2000
     seq = generate_hierarchical_sequence(cg_gt.M, s_length=n)
     cg = CG1(DT=0.1, theta=0.96)
     cg,_ = hcm_learning(seq, cg)
     cg.convert_chunks_in_arrays()
-    cg.save_graph(name = 'visual_chunks')
+    cg.save_graph(name='visual_chunks')
     return
 
 def c3_chunk_learning():
@@ -411,10 +393,9 @@ def c3_chunk_learning():
     return
 
 
-def prob_hcm_rnn():
+def rt_human_hcm_rnn():
+    """Simulate reaction time for HCM and RNN on SRT task"""
     import pickle
-    # with open('hcm_rnn_rt_p.pkl', 'rb') as f:
-    #     data = pickle.load(f)
     data = {}
     data['id'] = []
     data['p_rnn'] = []
@@ -446,7 +427,7 @@ def prob_hcm_rnn():
         data['seq'] += trainingseq
         data['rt'] += list(dfsubject[dfsubject['id'] == subj]['timecollect'])[200:800]
 
-        with open('../OutputData/hcm_rnn_rt_p_test.pkl', 'wb') as f:
+        with open('../OutputData/hcm_rnn_rt_p.pkl', 'wb') as f:
             pickle.dump(data, f)
     return
 
@@ -526,11 +507,10 @@ def transferinterferenceexperiment():
     dff.to_csv('../OutputData/TransferExperiment')
     return
 
-def model_comparison_HCM_RNN():
-    '''Comparison across humans, RNN, and HCM, experiment on predictability horizon, and '''
-    # do RNN experiments
-    c3_RNN()
-    c3_chunk_learning()
+def chunk_human_hcm_rnn():
+    """Chunking behavior of hcm and rnn on human SRT task"""
+    c3_RNN() # Sequence Learning RNN
+    c3_chunk_learning() # Sequence Learning HCM
     return
 
 
@@ -549,11 +529,11 @@ def main():
     cg = rational_chunking_all_info(seq, cg, maxit=5)
 
     ################# Measure KL to produce data for the convergence plot ##############
-    measure_KL()
+    convergence_hierarchy()
 
     ################ Compare human performance with RNN ###############
-    model_comparison_HCM_RNN()
-    prob_hcm_rnn()# in this version, train rnn until convergence
+    chunk_human_hcm_rnn()
+    rt_human_hcm_rnn()
 
     ################ Testing Transfer and Intereference Graph Generation Techniques.
     transferinterferenceexperiment()

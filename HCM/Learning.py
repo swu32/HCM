@@ -1,9 +1,8 @@
-import numpy as np
 from scipy import stats
-from scipy.stats import chisquare
-from chunks import *
-from buffer import *
+
 from Chunking_Graph import *
+from buffer import *
+from chunks import *
 
 
 def learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record, chunk_termination_time, cg):
@@ -35,9 +34,14 @@ def learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record, c
 def learning_and_update(current_chunks_idx, chunk_record, cg, t, learn = True):
     '''
     Update transitions and marginals and decide to chunk
-    t: finishing parsing at time t
-    current_chunks_idx: the chunks ending at the current time point
-    chunk_record: boundary record of when the previous chunks have ended.'''
+
+            Parameters:
+                    current_chunks_idx (int): the chunks ending at the current time point
+                    t (int): finishing parsing at time t
+                    chunk_record (dict): boundary record of when the previous chunks have ended.
+            Returns:
+                    cg (CG1): Chunking Graph
+    '''
     n_t = cg.pad
     if len(chunk_record) > 1:
         for chunk_idx in current_chunks_idx:
@@ -56,10 +60,11 @@ def learning_and_update(current_chunks_idx, chunk_record, cg, t, learn = True):
                             combined_chunk, dt = check_adjacency(prev_idx, chunk_idx, delta_t, t, cg)
                             if combined_chunk is not None:
                                 cg.chunks[prev_idx].update_transition(chunk_idx, dt)
-                                if learn == True: # online learning
+                                if learn == True:  # online learning
                                     cg, chunked = threshold_chunking(prev_idx, chunk_idx, combined_chunk, dt, cg)
                 delta_t = delta_t + 1
     return cg
+
 
 def rational_update(current_chunks_idx, chunk_record, cg, t):
     '''check chunk adjacency in cg, and find the most urgent chunk to combine together'''
@@ -80,43 +85,15 @@ def rational_update(current_chunks_idx, chunk_record, cg, t):
             delta_t = delta_t + 1
     return cg
 
-def rational_learning(cg):
-    def hypothesis_test(clidx, cridx, cg, dt):
-        cl = cg.chunks[clidx]
-        cr = cg.chunks[cridx]
-        assert len(cl.adjacency) > 0
-        assert dt in list(cl.adjacency.keys())
-        n = cg.get_N()
 
-        # Expected
-        ep1p1 = cl.count / n * cr.count
-        ep1p0 = cl.count / n * (n - cr.count)
-        ep0p1 = (n - cl.count) / n * cr.count
-        ep0p0 = (n - cl.count) / n * (n - cr.count)
-
-        # Observed
-        op1p1 = cl.adjacency[dt][cridx]
-        op1p0 = cl.get_N_transition(dt) - cl.adjacency[dt][cridx]
-        op0p1 = 0
-        op0p0 = 0
-        for ncl in list(cg.chunks):  # iterate over p0, which is the cases where cl is not observed
-            if ncl != cl:
-                if dt in list(ncl.adjacency.keys()):
-                    if cridx in list(ncl.adjacency[dt].keys()):
-                        op0p1 = op0p1 + ncl.adjacency[dt][cridx]
-                        for ncridx in list(ncl.adjacency[dt].keys()):
-                            if ncridx != cr:
-                                op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
-
-        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
-        if pvalue < 0.05:
-            return False  # reject independence hypothesis, there is a correlation
-        else:
-            return True
-
-    # iterate through all chunk pairs and find the chunks with the biggest candidancy
-    candidancy_pairs = []
-
+def rational_learning(cg, n_update=10):
+    """ given a learned representation, update chunks based on rank of joint occurrence frequency and hypothesis tests
+            Parameters:
+                n_update: the number of concatinations made based on the pre-existing cg records
+            Returns:
+                cg: chunking graph with empty chunks
+    """
+    candidancy_pairs = []  # iterate through all chunk pairs and find the chunks with the biggest candidancy
     for _prevck in cg.chunks:
         _previdx = _prevck.index
         for _dt in list(_prevck.adjacency.keys()):
@@ -124,23 +101,18 @@ def rational_learning(cg):
                 _postck = cg.chunks[_postidx]
                 _cat = combinechunks(_previdx, _postidx, _dt, cg)
                 # hypothesis test
-                if hypothesis_test(_previdx, _postidx, cg, _dt) == False:  # reject null hypothesis
-                    candidancy_pairs.append([(_previdx, _postidx,_cat,_dt), _prevck.adjacency[_dt][_postidx]])
+                if cg.hypothesis_test(_previdx, _postidx, _dt) == False:  # reject null hypothesis
+                    candidancy_pairs.append([(_previdx, _postidx, _cat, _dt), _prevck.adjacency[_dt][_postidx]])
 
-    candidancy_pairs.sort(key=lambda tup:tup[1],reverse=True)
+    candidancy_pairs.sort(key=lambda tup: tup[1], reverse=True)
 
-    n_update = 10 # number of chunk combinations allowed.
+    # number of chunk combinations allowed.
     for i in range(0, n_update):
         prev_idx, current_idx, cat, dt = candidancy_pairs[i][0]
         cg.chunking_reorganization(prev_idx, current_idx, cat, dt)
 
-        if i>len(candidancy_pairs):
+        if i > len(candidancy_pairs):
             break
-    cg.empty_counts()
-
-    # empty out all the counts before the next while loop
-
-
     return cg
 
 
@@ -351,10 +323,10 @@ def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
 
 
 def combinechunks(prev_idx, post_idx, dt, cg):
-    ''' update transitions between chunks with a temporal proximity
+    """ update transitions between chunks with a temporal proximity
      chunk ends at the point of the end_point_chunk
      candidate chunk ends at the point of the end_point_candidate_chunk
-     time_diff: difference between end of the post chunk and the end of the previous chunk'''
+     time_diff: difference between end of the post chunk and the end of the previous chunk"""
     prev = cg.chunks[prev_idx]
     post = cg.chunks[post_idx]
     assert post_idx in prev.adjacency[dt].keys()
@@ -403,7 +375,7 @@ def combinechunks(prev_idx, post_idx, dt, cg):
 
 
 def check_adjacency_mtx(prev, post, end_point_prev, end_point_post):
-    '''returns empty matrix if not chunkable'''
+    """returns empty matrix if not chunkable"""
     # prev and post denotes ending time, but based on how long the chunks are, prev can end after post.
     # update transitions between chunks with a temporal proximity
     # chunk ends at the point of the end_point_chunk
@@ -1082,34 +1054,50 @@ def hcm_learning(arayseq, cg, learn=True):
     return cg, chunk_record
 
 
-def hcm_rational(arayseq, cg,maxIter=20):
-    '''Rational Learning
-       Chunking happens every parse through the sequence. '''
+def hcm_rational(arayseq, cg, maxIter = 20):
+    """
+    returns chunking graph based on rational chunk learning
+
+            Parameters:
+                    arayseq(ndarray): Observational Sequences
+                    cg (CG1): Chunking Graph
+
+            Returns:
+                    cg (CG1): Learned Representation from Data
+    """
     seql, H, W = arayseq.shape
     cg.update_hw(H, W)
     seq_over = False
-    chunk_record = {}  # chunk ending time, and which chunk is it.
+    seqO, seql = convert_sequence(arayseq[0:1, :, :])  # loaded with the 0th observation
 
-    seq, seql = convert_sequence(arayseq[0:1, :, :])  # loaded with the 0th observation
-
-    t = 0
-    Buffer = buffer(t, seq, seql, arayseq.shape[0])
-    # seql: length of the current parsing buffer
-    maxchunksize = 0
     Iter = 0
     independence = False
-    while independence == False and Iter<=maxIter:
+    while independence == False and Iter <= maxIter:
+        seq = seqO # reset the sequence
+        cg.empty_counts()  # empty out all the counts before the next sequence parse
+        chunk_record = {}  # chunk ending time, and which chunk is it.
+        t = 0
+        Buffer = buffer(t, seqO, seql, arayseq.shape[0])  # seql: length of the current parsing buffer
+        maxchunksize = cg.getmaxchunksize()
+        print('============ empty out sequence ========== ')
         while seq_over == False:
             # identify latest ending chunks
             current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record,
                                                                                    Buffer.t)  # chunks
-            cg = learning_and_update(current_chunks_idx, chunk_record, cg, Buffer.t, learn = False)
+
+            cg = learning_and_update(current_chunks_idx, chunk_record, cg, Buffer.t, learn=False)
+
+            maxchunksize = cg.getmaxchunksize()
             seq = Buffer.refactor(seq, dt)
             Buffer.reloadsize = maxchunksize + 1
             Buffer.checkreload(arayseq)
             seq_over = Buffer.checkseqover()
-        independence.
-        cg = rational_learning()
+        print([ck.count for ck in cg.chunks])
+
+        independence = cg.independence_test()
+        cg = rational_learning(cg, n_update=10)
+        seq_over = False
+        Iter = Iter + 1
 
     return cg, chunk_record
 
@@ -1225,7 +1213,7 @@ def rational_chunking_all_info(seq, cg, maxit=4):
             return True  # cannot continute the test because of lack of sample size
 
         chisquare = N * (p1p1 * ((op1p1 - p1p1) / p1p1) ** 2 + p1p0 * ((op1p0 - p1p0) / p1p0) ** 2 + p0p1 * (
-                    (op0p1 - p0p1) / p0p1) ** 2
+                (op0p1 - p0p1) / p0p1) ** 2
                          + p0p0 * ((op0p0 - p0p0) / p0p0) ** 2)
         pvalue = stats.chi2.pdf(chisquare, 1)
         if pvalue < 0.0005:
