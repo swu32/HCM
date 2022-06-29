@@ -751,7 +751,6 @@ def generate_new_chunk(setofchunks):
     vab[0:va.shape[0], :, :] = va
     vab[va.shape[0]:, :, :] = vb
     ab = arr_to_tuple(vab)
-    print(ab,a,b)
     if ab in setofchunks or np.array_equal(a, zero) or np.array_equal(b, zero):
         generate_new_chunk(setofchunks)
     else:

@@ -12,6 +12,7 @@ from PIL import Image
 import os
 from time import time
 from chunks import *
+import pickle
 
 
 def convergence_hierarchy():
@@ -62,10 +63,10 @@ def convergence_hierarchy():
     return df
 
 
-def NN_testing(sequence):
-    '''Input: sequence of a certain size that the NN is used then to train'''
-    # convert the sequence into lists
 
+def NN_testing(sequence):
+    """Train an RNN to learn sequence and generated imagination based on the learned representations by RNN"""
+    # convert the sequence into lists
     # Ns = np.arange(50, 3000, 50)# the length of sequence decided to show neural networks
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-epochs', type=int, default=1)
@@ -98,7 +99,6 @@ def c3_RNN():
     n_sample = 50
     for lr in [0.1,0.01,0.001]:
         args.learning_rate = lr
-
         for s in range(0, n_sample): # across 30 runs
             for idx in range(200, 800):
                 dataset = Dataset(sequence[0:idx-1], args) # use all of the past dataset to train
@@ -123,11 +123,11 @@ def c3_RNN():
     return
 
 
-
 def p_RNN(trainingseq):
-    # need a list of prediction and output probability.
-    # train until the next mistake.
-    '''Compare neural network behavior with human on chunk prediction'''
+    """Train neural network on SRT instruction sequences
+                Returns:
+                    prob (list): prediction probability of the instruction
+    """
     sequence = np.array(trainingseq).reshape((-1,1,1))
     sequence[0:5,:,:] = np.array([0,1,2,3,4]).reshape((5,1,1))
     #sequence = np.array(generateseq('c3', seql=600)).reshape((600, 1, 1))
@@ -150,41 +150,8 @@ def p_RNN(trainingseq):
     return prob
 
 
-def NN_data_record():
-    ################# Training Neural Networks to Compare with Learning Sequence ###########
-
-    df = {}
-
-    df['N'] = []
-    df['klnn'] = []
-    n_sample = 5  # taking 10 samples for each of the N specifications.
-    Ns = np.arange(50, 3000, 50)
-
-    cg_gt = generative_model_random_combination(D=3, n=5)
-    cg_gt = to_chunking_graph(cg_gt)
-
-    for i in range(0, n_sample):
-        # Ns = np.arange(100,3000,100)
-
-        for j in range(0, len(Ns)):
-            n = Ns[j]
-            seq = generate_hierarchical_sequence(cg_gt.M, s_length=n)
-            print(len(seq))
-            imagined_seq = NN_testing(seq)
-            imagined_seq = np.array(imagined_seq).reshape([len(imagined_seq),1,1])
-            kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
-            df['N'].append(n)
-            df['klnn'].append(kl)
-            print({'kl is ': kl})
-
-    df = pd.DataFrame.from_dict(df)
-    df.to_pickle('../OutputData/KL_neural_network_N')  # where to save it, usually as a .pkl
-    return
 
 def readGif(filename, asNumpy=True):
-    """ Read images from an animated GIF file.  Returns a list of numpy
-    arrays, or, if asNumpy is false, a list of PIL images."""
-
     # Check PIL
     if PIL is None:
         raise RuntimeError("Need PIL to read animated gif files.")
@@ -231,10 +198,8 @@ def readGif(filename, asNumpy=True):
 
 def squidgifmoving():
     """Experiment on semi-realistic stimuli learning chunks from moving gif sequences"""
-    gifarray = readGif('./gif_data/octo_25.gif')
-    # this function loads gifs into a list of np arrays
-    T = len(gifarray)
-    # find a unique combination of colors, assign them as interger, the blue color should be 0
+    gifarray = readGif('./gif_data/octo_25.gif')# loads gifs into a list of np arrays
+    T = len(gifarray)# find a unique combination of colors, assign them as interger, the blue color should be 0
     colormap = []
     cm = 0
     animseq = np.zeros((T, 25, 25))
@@ -295,8 +260,7 @@ def fmri():
         cg.reinitialize()
         cg, chunkrecord = hcm_learning(seq, cg, learn = False)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
 
-        # store chunks learned by cg
-        learned_chunk = []
+        learned_chunk = []# store chunks learned by cg
         for ck in cg.chunks:
             # record all the chunks
             ck.to_array()
@@ -312,6 +276,7 @@ def fmri():
 
 
 def rationalfmri():
+    """Experiment on running rational chunking model on fMRI data"""
     import numpy as np
     with open('../InputData/fmri_timeseries/timeseries.npy', 'rb') as f:
         whole_time_series = np.load(f)
@@ -351,6 +316,7 @@ def visual_chunks():
     return
 
 def c3_chunk_learning():
+    """Train HCM on c3 condition of SRT instruction sequences"""
     def get_chunk_list(ck):
         #print(np.array(list(ck.content)))
         T = int(max(np.array(list(ck.content)).reshape([-1,4])[:, 0])+1)
@@ -363,8 +329,6 @@ def c3_chunk_learning():
                 print('')
         return list(chunk)
 
-    import pickle
-    ''' save chunk record for HCM learned on behaviorial data '''
     df = {}
     df['time'] = []
     df['chunksize'] = []
@@ -432,8 +396,7 @@ def rt_human_hcm_rnn():
     return
 
 def hcm_c3_probability(training_seq):
-    ''' input: sequence that participants used to train
-        output: sequence of probability '''
+    ''' Evaluate prediction probability of HCM trained on SRT instruction sequences '''
     time_series = np.array(training_seq).reshape([-1,1,1])
     seq = time_series.astype(int)
     cg = CG1(DT=0.1, theta=0.96)  # initialize chunking part with specified parameters
@@ -451,6 +414,7 @@ def hcm_c3_probability(training_seq):
 
 
 def transferinterferenceexperiment():
+
     def transfer_train_measure_KL(cg_trained, cg_test, training_sequence):
         cg_trained = learn_stc_classes(training_sequence, cg_trained)
         imagined_seq_trained = cg_trained.imagination(1000, sequential=True, spatial=False, spatial_temporal=False)
@@ -513,6 +477,14 @@ def chunk_human_hcm_rnn():
     c3_chunk_learning() # Sequence Learning HCM
     return
 
+
+def test_cggt_generation_validity():
+    for D in range(1,10):
+        for n in range(4,10):
+            cggt = generative_model_random_combination(D=D, n=n)
+            print('D = ', D, ' n = ', n, ' sum =', np.sum(list(cggt.M.values())))
+
+    return
 
 def main():
     ################## Generative Model ################

@@ -59,8 +59,16 @@ class CG1:
         return
 
     def eval_avg_encoding_len(self):
-        #
-        return
+        """Evaluate the expected average encoding resource per sequence length
+            ER = E_{c\in B}(-log(p_c)/|c|)"""
+        N = self.get_N()
+        ER = 0
+        for chunk in self.chunks:
+            c_sz = chunk.volume
+            c_p = chunk.count / N
+            ER = ER + c_p * (- np.log(c_p)/c_sz)
+
+        return ER
 
     def getmaxchunksize(self):
         maxchunksize = 0

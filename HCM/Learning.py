@@ -1096,6 +1096,7 @@ def hcm_rational(arayseq, cg, maxIter = 20):
 
         independence = cg.independence_test()
         cg = rational_learning(cg, n_update=10)
+        print('Average Encoding Length is            ER = ', cg.eval_avg_encoding_len())
         seq_over = False
         Iter = Iter + 1
 
