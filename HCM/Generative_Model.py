@@ -752,7 +752,7 @@ def generate_new_chunk(setofchunks):
     vab[va.shape[0]:, :, :] = vb
     ab = arr_to_tuple(vab)
     if ab in setofchunks or np.array_equal(a, zero) or np.array_equal(b, zero):
-        generate_new_chunk(setofchunks)
+        return generate_new_chunk(setofchunks)
     else:
         return ab, a, b
 
@@ -777,14 +777,16 @@ def generative_model_random_combination(D=3, n=5):
 
     setofchunkswithoutzero = setofchunks.copy()
     setofchunkswithoutzero.remove(arr_to_tuple(np.zeros([1,1,1])))
-    constraints =  []
+    constraints = []
     for d in range(0, D):
         # pick random, new combinations
         ab, a, b = generate_new_chunk(setofchunkswithoutzero)
         while ab in setofchunks:# keep generating new chunks that is new
             ab, a, b = generate_new_chunk(setofchunkswithoutzero)
-        constraints.append([ab,a,b])
+        constraints.append([ab, a, b])
         setofchunks.append(ab)
+        setofchunkswithoutzero = setofchunks.copy()
+        setofchunkswithoutzero.remove(arr_to_tuple(np.zeros([1, 1, 1])))
 
     # calculate the chunk occurance probabilities, if the chunks are combined independently, given this
     # distribution assignment.

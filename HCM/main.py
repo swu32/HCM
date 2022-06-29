@@ -281,12 +281,12 @@ def rationalfmri():
     with open('../InputData/fmri_timeseries/timeseries.npy', 'rb') as f:
         whole_time_series = np.load(f)
     subject_learned_chunk = []
-    for i in range(0, 1):#whole_time_series.shape[0]):
+    for i in range(0, whole_time_series.shape[0]):
         time_series = whole_time_series[i,:,:]
         seq = time_series.astype(int).reshape(time_series.shape + (1,))
         cg = CG1(DT=0.1, theta=1.0, pad=40)  # initialize chunking part with specified parameters
         cg, chunkrecord = hcm_rational(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
-        cg.save_graph(name='subject' + str(i), path='./fmri_chunk_data/')
+        cg.save_graph(name='subject' + str(i), path='../OutputData/exp/fmri_chunk_data/')
 
         # store chunks learned by cg
         learned_chunk = []
@@ -298,8 +298,8 @@ def rationalfmri():
             learned_chunk.append((chunk_array, freq))
         subject_learned_chunk.append([learned_chunk, chunkrecord])
 
-    with open('../OutputData/fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
-        np.save(f, subject_learned_chunk)
+        with open('../OutputData/exp/fmri_chunk_data/fmri_learned_chunks.npy', 'wb') as f:
+            np.save(f, subject_learned_chunk)
 
     return
 
@@ -483,7 +483,6 @@ def test_cggt_generation_validity():
         for n in range(4,10):
             cggt = generative_model_random_combination(D=D, n=n)
             print('D = ', D, ' n = ', n, ' sum =', np.sum(list(cggt.M.values())))
-
     return
 
 def main():
@@ -521,7 +520,5 @@ def main():
     return
 
 if __name__ == "__main__":
-    #test_cggt_generation_validity()
-    rationalfmri()
     main()
 
