@@ -3,7 +3,7 @@ from Generative_Model import *
 import pandas as pd
 from Learning import *
 from train import *
-from model import *
+from nn_model import *
 from dataset import *
 from CG1 import *
 import numpy as np
@@ -521,5 +521,7 @@ def main():
     return
 
 if __name__ == "__main__":
+    #test_cggt_generation_validity()
+    rationalfmri()
     main()
 

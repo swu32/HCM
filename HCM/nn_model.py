@@ -2,8 +2,6 @@ import torch
 from torch import nn
 
 class Model(nn.Module):
-    '''Looks like there is an embedding dimension of 40, followed by an lstm layer with 40 hidden units and 20%
-    dropout, finally, a linear layer is being attached, so in total, three layers. '''
     def __init__(self, dataset):
         super(Model, self).__init__()
         self.lstm_size = 40

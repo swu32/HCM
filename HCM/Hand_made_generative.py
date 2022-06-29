@@ -44,7 +44,6 @@ def hierarchy1d():
     return cg
 
 
-
 def compositional_imgs():
     """Each higher level is made of composing elements in more elementary levels
     In the generative model, images are iid sampled"""
