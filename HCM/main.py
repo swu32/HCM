@@ -37,7 +37,7 @@ def convergence_hierarchy():
             for n in Ns:
                 print({' d ': d, ' i ': i, ' n ': n })
                 # cg_gt = hierarchy1d() #one dimensional chunks
-                seq = generate_hierarchical_sequence(cg_gt.M, s_length=n)
+                seq = generate_random_hierarchical_sequence(cg_gt.M, s_length=n)
                 cg = Chunking_Graph(DT=0, theta=1)  # initialize chunking part with specified parameters
                 cg = rational_chunking_all_info(seq, cg)
                 imagined_seq = cg.imagination(n, sequential=True, spatial=False, spatial_temporal=False)
