@@ -4,34 +4,46 @@ import numpy as np
 
 class Chunking_Graph:
     """
-    A class to represent the representation of a hierarchical chunk learner
-    Intuitively, it represents what is the agent's belief about the statistics of the world
-    ...
+    A class to represent the representation of a hierarchical chunk learner.
 
     Attributes
     ----------
     vertex_list : list of chunk object
-        chunks learned
+        list of vertex with the order of addition
     vertex_location : list
-        graph location of where the chunk is
+        location of vertex on the visualization graph
     edge_list : list
-        Edge information about which chunk combined with which in the model
-
+        list of vertex tuples
+    y_max: int
+        the initial height of the graph, used for plotting
+    x_max: int
+        initial x location of the graph
+    M: dict
+        set of chunk objects, and the frequency that each is observed
+    T: dict
+        transition from chunk to chunk
+    theta: float
+        forgetting rate
+    deletion_threshold: float
+    H: int
+        height of the sequence
+    W: int
+        width of the sequence
+    zero:
+        non-observational element
     """
     def __init__(self, y_max= 0, x_max=0, DT = 0.01, theta=0.75):
         """DT: deletion threshold"""
-        # vertex_list: list of vertex with the order of addition
-        # edge list: list of vertex tuples
         self.vertex_list = [] # list of the chunks
         self.vertex_location = []
         self.edge_list = []
-        self.y_max = y_max # the initial height of the graph, used for plotting
-        self.x_max = x_max # initial x location of the graph
-        self.M = {}# set of chunk objects, and the frequency that each is observed
+        self.y_max = y_max
+        self.x_max = x_max
+        self.M = {}
         self.T = {}
-        self.theta = theta# forgetting rate
+        self.theta = theta
         self.deletion_threshold = DT
-        self.H = 1 # default
+        self.H = 1
         self.W = 1
         self.zero = None
 
@@ -42,27 +54,25 @@ class Chunking_Graph:
         return
 
     def generate_empty(self):
-        if self.zero==None:
+        if self.zero == None:
             self.zero = Learning.arr_to_tuple(np.zeros([1, self.H, self.W]))
             self.M[self.zero] = 0
             self.add_chunk_to_vertex(self.zero)
         return
 
-    def get_M(self):
-        return self.M
-
     def get_nonzeroM(self):
-        '''returns an M without zero component'''
+        """returns an M without zero component"""
         nzm = list(self.M.keys()).copy()
         nzmm = nzm.copy()
         nzmm.remove(self.zero)
         return nzmm
 
-    # update graph configuration
+
     def add_chunk_to_vertex(self, newc, left= None, right = None):
+        """update graph configuration"""
         self.vertex_list.append(newc)
-        # compute the x and y location of the chunk based on pre-existing
-        # graph configuration, when this chunk first emerges
+        # compute the x and y location of a new chunk based on pre-existing
+        # graph configuration
         if left is None and right is None:
             x_new_c = self.x_max + 1
             y_new_c = self.y_max # no y axis for atomix chunk
@@ -84,8 +94,11 @@ class Chunking_Graph:
         return
 
     def add_chunk_to_cg_class(self, chunk):
-        """chunk: nparray converted to tuple format
-        Every time when a new chunk is identified, this function should be called """
+        """
+        Add a new chunk to the existing representation
+            Parameters:
+                chunk: np.array converted to tuple format
+        """
 
         if len(self.M) > 0:
             if chunk in list(self.M.keys()):
@@ -98,44 +111,10 @@ class Chunking_Graph:
             self.add_chunk_to_vertex(chunk)
             return
 
-    def update_empty(self, n_empty):
-        """chunk: nparray converted to tuple format
-        Every time when a new chunk is identified, this function should be called """
-        ZERO = self.zero
-        self.M[ZERO] = self.M[ZERO] + n_empty
-        return
-
-    def update_transition_between_chunks(self, prev, current, dt):
-        """prev: previous chunk observation, represented by tuples
-            current: current chunk, in the tuple format
-            dt = 0"""
-        # at the moment, the transition needs to specify the temporal lag between the two chunks,
-        # dt: when the current element initiates after the initiation of prev
-        # if strictly temporal, then dt = len(prev)
-        # if strictly spatial, then dt = 0
-        chunk_pair_f = self.T
-        key_t = str(dt)
-
-        if prev in list(chunk_pair_f.keys()):
-            if key_t not in list(chunk_pair_f[prev].keys()):
-                chunk_pair_f[prev][key_t] = {}
-            if current in list(chunk_pair_f[prev][key_t].keys()):
-                chunk_pair_f[prev][key_t][current] = chunk_pair_f[prev][key_t][current] + 1
-            else:
-                chunk_pair_f[prev][key_t][current] = 1
-        else:
-            chunk_pair_f[prev] = {}
-            chunk_pair_f[prev][key_t] = {}
-            chunk_pair_f[prev][key_t][current] = 1
-
-        return
-
-    # convert frequency into probabilities
     def transition_into_probabilities(self, prev, current):
         """returns the marginal probability of prev,
         and the transition probability from prev to current
         based on the past history of experience"""
-        # decide if the number of exposure is significant enough to be concatinated together as a chunk
         chunk_f = self.M
         chunk_pair_f = self.T
         if (prev in list(chunk_f.keys()) and prev in list(
@@ -178,34 +157,9 @@ class Chunking_Graph:
                                 chunk_pair_f[fromkey][dt].pop(tokey)
         return
 
-    def chunking_reorganization1(self,  prev, current, cat, dt):
-        '''
-        Reorganize marginal and transitional probability matrix when a new chunk is created by concatinating prev and current
-        '''
-        try:
-            self.add_chunk_to_vertex(cat, left=prev, right=current)
-        except ValueError:
-            print('some chunks are not found in the list')
 
-        """==================Model hasn't seen this chunk before:========================"""
-        if (tuple(cat) not in list(self.M.keys())) & (
-                tuple(current) in list(self.M.keys())):
-            # estimate the marginal probability of cat from P(s_last)P(s|s_last)
-            # chunk_f[tuple(cat)] =  P_current_giv_prev*P_prev*sum(chunk_f.values())
-            self.M[tuple(cat)] = 1
-            if self.T != {}:
-                if tuple(current) in list(self.T.keys()):
-                    self.T[tuple(cat)] = self.T[tuple(
-                        current)].copy()  # inherent the transition from the last chunk element
-                for key in list(self.T.keys()):
-                    if str(dt) in list(self.T[key].keys()):
-                        if tuple(prev) in list(self.T[key][str(dt)].keys()):
-                            self.T[key][str(dt)][tuple(cat)] = 1
-        return
-
-    def chunking_reorganization(self,  prev, current, cat, dt):
-        '''Reorganize marginal and transitional probability matrix when a new chunk is created by concatinating prev and current
-        '''
+    def chunking_reorganization(self, prev, current, cat, dt):
+        """ Reorganize marginal and transitional probability matrix when a new chunk is created by concatinating prev and current """
         try:
             self.add_chunk_to_vertex(cat, left=prev, right=current)
         except ValueError:
@@ -269,9 +223,7 @@ class Chunking_Graph:
         return
 
     def pop_transition_matrix(self, element):
-        """transition_matrix:
-        delete the entries where element follows some other entries.
-        """
+        """delete the entries of element in the transition matrix"""
         transition_matrix = self.T
         # pop an element out of a transition matrix
         if transition_matrix != {}:
@@ -285,9 +237,6 @@ class Chunking_Graph:
                     transition_matrix[key].pop(element)
         return
 
-    def update_dynamic_chunk_graph(self):
-        """With additional infomration about what time is the chunk added"""
-        pass
 
     def get_transitional_p(self,prev,current):
         """returns the transitional probability form the previous to the current chunk"""
@@ -304,8 +253,7 @@ class Chunking_Graph:
     def imagination(self, n, sequential = False, spatial = False,spatial_temporal = False):
         ''' Independently sample from a set of chunks, and put them in the generative sequence
             Obly support transitional probability at the moment
-            n+ temporal length of the imagiantion'''
-        transition_matrix = self.T
+            n+ temporal length of the imagination'''
         marginals = self.M
         s_last_index = np.random.choice(np.arange(0,len(list(self.M.keys())),1))
         s_last = list(self.M.keys())[s_last_index]
@@ -355,9 +303,6 @@ class Chunking_Graph:
             return None
 
 def sample_from_distribution(states, prob):
-    """
-    states: a list
-    prob: another list that contains the probability"""
     prob = [k / sum(prob) for k in prob]
     cdf = [0.0]
     for s in range(0, len(states)):
@@ -399,9 +344,6 @@ def tuple_to_arr(tup):
     return np.array(tup)
 
 def sample_spatial_temporal(marg):
-    """When it returns [], it means there is no prediction,
-        otherwise, returns the predicted sequence of certain length as a list
-        s_last: a tuple, of last stimuli, as the key to look up in the transition probability dictionary"""
     if marg == {}:
         return [], 0
     else:
