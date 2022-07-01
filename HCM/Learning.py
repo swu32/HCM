@@ -6,11 +6,22 @@ from chunks import *
 
 
 def learning_and_update_mtx(current_chunks, t, previous_chunk_boundary_record, chunk_termination_time, cg):
-    '''
+    """
     Update transitions and marginals and decide to chunk for matrix representations
+
+    Parameters
+    ----------
     t: the time point where the current chunks have ended.
     current_chunks: the chunks ending at the current time point
-    previous_chunk_boundary_record: boundary record of when the previous chunks have ended. '''
+    previous_chunk_boundary_record: boundary record of when the previous chunks have ended.
+    chunk_termination_time
+
+    Returns
+    -------
+    chunk_termination_time
+    cg: an updated chunking graph
+    """
+
 
     for chunk in current_chunks:
         chunk_termination_time[
@@ -67,7 +78,20 @@ def learning_and_update(current_chunks_idx, chunk_record, cg, t, learn = True):
 
 
 def rational_update(current_chunks_idx, chunk_record, cg, t):
-    '''check chunk adjacency in cg, and find the most urgent chunk to combine together'''
+    """
+    check chunk adjacency in cg, and find the most urgent chunk to combine together
+
+    Parameters
+    ----------
+    current_chunks_idx
+    chunk_record
+    cg
+    t
+
+    Returns
+    -------
+
+    """
     n_t = cg.pad
     for chunk_idx in cg.chunks:
         delta_t = 0  # the difference between the end of the current chunk and the end of the previous chunks
@@ -117,6 +141,22 @@ def rational_learning(cg, n_update=10):
 
 
 def threshold_chunking_mtx(prev, current, combined_chunk, dt, cg):
+    """
+
+    Parameters
+    ----------
+    prev
+    current
+    combined_chunk
+    dt
+    cg
+
+    Returns
+    -------
+    cg: chunking graph
+    chunked:
+
+    """
     def hypothesis_test(cl, cr, Marg, T, dt, zero):
         M = Marg.copy()
         M.pop(zero)  # delete zero since it is not useful anyways
@@ -187,7 +227,21 @@ def threshold_chunking_mtx(prev, current, combined_chunk, dt, cg):
 
 
 def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
-    """combined_chunk: a new chunk instance"""
+    """
+
+    Parameters
+    ----------
+    prev_idx
+    current_idx
+    combined_chunk
+    dt
+    cg
+
+    Returns
+    -------
+    cg:
+    chunked:
+    """
 
     def hypothesis_test(clidx, cridx, cg, dt):
         cl = cg.chunks[clidx]
@@ -261,15 +315,23 @@ def checkequal(chunk1, chunk2):
         return False
 
 
-def evaluatesimilarity(chunk1, chunk2):
-    return chunk1.checksimilarity(chunk2)
-
-
 def check_adjacency(prev_idx, post_idx, time_diff, t, cg):
+    """
+    returns empty matrix if not chunkable
+    Parameters
+    ----------
+    prev_idx
+    post_idx
+    time_diff: difference between end of the post chunk and the end of the previous chunk
+    t
+    cg
+
+    Returns
+    -------
+
+    """
     # check adjacency should only check chunks with no variables, in other words, concrete chunks,
     # and their ancestors are tagged with this variable relationship
-    # time_diff: difference between end of the post chunk and the end of the previous chunk
-    ''' returns empty matrix if not chunkable '''
     # update transitions between chunks with a temporal proximity
     # chunk ends at the point of the end_point_chunk
     # candidate chunk ends at the point of the end_point_candidate_chunk
@@ -453,7 +515,7 @@ def check_adjacency_mtx(prev, post, end_point_prev, end_point_post):
 
 
 def add_singleton_chunk_to_M(seq, t, cg):
-    '''Add the singleton chunk observed at the temporal point t of the seq to the set of chunks M'''
+    """Add the singleton chunk observed at the temporal point t of the seq to the set of chunks M"""
     H, W = seq.shape[1:]
     current_chunks = set()  # the set of chunks that end right before this moment t.
     for i in range(0, H):
@@ -685,7 +747,7 @@ def pop_chunk_in_seq_boundary(chunk_idx, seqc, cg):
     return seqcc
 
 
-def identify_biggest_chunk(cg, seqc, checktype='full'):  # _c_full
+def identify_biggest_chunk(cg, seqc, checktype='full'):
     '''Chunk with a bigger size is priorized to explain the sequence'''
     # check the occation when the seqc start at above 0, in which case it implies that
     # there are empty observations in certain time slices.
@@ -715,7 +777,7 @@ def identify_biggest_chunk(cg, seqc, checktype='full'):  # _c_full
     return maxchunk, seqc  # strange, maxchunk is indeed an instance inside cg, a chunk inside cg
 
 
-def identify_singleton_chunk(cg, seqc):  # _c_
+def identify_singleton_chunk(cg, seqc):
     chunkcontent = [seqc[0]]
     chunk = Chunk(chunkcontent, H=cg.H, W=cg.W, pad=cg.pad)
     cg.add_chunk(chunk)
@@ -799,7 +861,7 @@ def identify_one_chunk_approximate(cg, seqc, explainchunk, chunk_record, t):
     return cg, seqc, chunk_record, explainchunk
 
 
-def check_seq_explained(seqc):  # _c_
+def check_seq_explained(seqc):
     # check whether there is a t = 0 in the seqc:
     if seqc == []:
         return True

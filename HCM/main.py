@@ -1,16 +1,13 @@
 from Hand_made_generative import *
 from Generative_Model import *
 import pandas as pd
-from Learning import *
 from train import *
 from nn_model import *
 from dataset import *
 from CG1 import *
-import numpy as np
 import PIL as PIL
 from PIL import Image
 import os
-from time import time
 from chunks import *
 import pickle
 
@@ -520,5 +517,6 @@ def main():
     return
 
 if __name__ == "__main__":
+    rationalfmri()
     main()
 

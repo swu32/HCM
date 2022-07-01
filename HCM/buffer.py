@@ -1,4 +1,5 @@
 class buffer():
+    """Buffer class to load the sequence in parts."""
     def __init__(self,t, seq, seql, arrayl, reloadsize = 20):
         self.t = t
         self.seq = seq

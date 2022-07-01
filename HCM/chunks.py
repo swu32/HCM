@@ -1,23 +1,90 @@
-import random
-import string
 import numpy as np
 
 class Chunk:
     """ Spatial Temporal Chunk
         At the moment, it lacks a unique identifier for which of the chunk is which, making the searching process
-        diffidult, ideally, each chunk should have its own unique name, (ideally related to how it looks like) """
+        diffidult, ideally, each chunk should have its own unique name, (ideally related to how it looks like)
+
+
+    Attributes
+    ----------
+    content:
+        chunk content, represented as set of tuples, with the location of signal specified and the observational values
+    variable:
+        a list of other chunks
+    H:
+    W:
+    index:
+        location in the list of chunks
+    count:
+        frequencies
+    pad:
+        boundary size for nonadjacency detection, set the pad to not 1 to enable this feature
+    adjacency:
+        transition frequencies
+    birth:
+        chunk creation time
+    volume:
+        the size of the chunk
+    indexloc:
+        index locations of the nonzero chunk entries
+    arraycontent:
+        content casted as np.array
+    boundarycontent:
+        set of boundaries
+    matching_threshold:
+        threshold of matching formulation
+    abstraction:
+        list of abstract chunks summarizing this chunk
+    entailment:
+        the chunk that the abstract chunk is pointing to
+    h,w,v:
+        discount coefficient when computing similarity between two chunks, relative to the temporal discount being 1
+
+    Methods
+    -------
+    get_full_content:
+    find_content_recursive:
+        recursively finding the entailing chunks if the current chunk is abstract
+    update_variable_count:
+    update:
+    to_array:
+        convert single chunk from tuple into np.array representation
+    get_N_transition:
+        Calculate the number of times this chunk transition to another chunk
+    get_index:
+        returns the index location of the chunk observations.
+    get_index_padded:
+        returns the padded index location of the chunks, used for non-adjacent chunk detection
+    concatinate:
+        concatinate one chunk with another chunk
+    average_content:
+        average the stored content with the matching sequence
+    variable_check_match:
+        check the matching of a variable chunk
+    check_match:
+        check whether chunk matches with sequential components
+    check_adjacency:
+    checksimilarity:
+    pointdistance:
+    update_transition:
+    empty_counts:
+        clear the transition and marginal count of each chunk
+    contentagreement:
+    get_transition:
+        """
 
     # A code name unique to each chunk
     def __init__(self, chunkcontent, variable = [], count = 1, H = None,W = None, pad=1):
         """chunkcontent: a list of tuples describing the location and the value of observation"""
         self.content = set(chunkcontent)
-        self.variable = variable # a list of other chunks
+        self.variable = variable
         self.T = int(max(np.array(chunkcontent)[:, 0])+1) # those should be specified when joining a chunking graph
         self.H = H
         self.W = W
         self.index = None
         self.count = count #
-        self.pad = pad # boundary size for nonadjacency detection, set the pad to not 1 to enable this feature.
+        self.pad = pad
         self.adjacency = {}
         self.birth = None # chunk creation time
         self.volume = len(self.content) #
@@ -107,6 +174,7 @@ class Chunk:
         return T, H, W, padded_index
 
     def conflict(self, c_):
+
         return False
 
     def concatinate(self, cR):
@@ -226,7 +294,7 @@ class Chunk:
         D = (x1[0]-x2[0])*(x1[0]-x2[0]) + self.h*(x1[1]-x2[1])*(x1[1]-x2[1]) + self.w*(x1[2]-x2[2])*(x1[2]-x2[2]) + self.v*(x1[0]-x2[0])*(x1[0]-x2[0])
         return D
 
-    def update_transition(self, chunkidx, dt): #_c_
+    def update_transition(self, chunkidx, dt):
         if dt in list(self.adjacency.keys()):
             if chunkidx in list(self.adjacency[dt].keys()):
                 self.adjacency[dt][chunkidx] = self.adjacency[dt][chunkidx] + 1
@@ -238,7 +306,6 @@ class Chunk:
         return
 
     def empty_counts(self):
-        # empty
         self.count = 0
         self.birth = None # chunk creation time
         # empty transitional counts
@@ -246,7 +313,6 @@ class Chunk:
             for chunkidx in list(self.adjacency[dt].keys()):
                 self.adjacency[dt][chunkidx] = 0
         return
-
 
     def contentagreement(self, content):
         if len(self.content) != len(content):
