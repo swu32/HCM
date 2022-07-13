@@ -129,6 +129,7 @@ def rational_learning(cg, n_update=10):
                     candidancy_pairs.append([(_previdx, _postidx, _cat, _dt), _prevck.adjacency[_dt][_postidx]])
 
     candidancy_pairs.sort(key=lambda tup: tup[1], reverse=True)
+    print(candidancy_pairs)
 
     # number of chunk combinations allowed.
     for i in range(0, n_update):
@@ -1100,8 +1101,7 @@ def hcm_learning(arayseq, cg, learn=True):
 
     while seq_over == False:
         # identify latest ending chunks
-        current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record,
-                                                                               Buffer.t)  # chunks
+        current_chunks_idx, cg, dt, seq, chunk_record = identify_latest_chunks(cg, seq, chunk_record,Buffer.t)  # chunks
         seq = Buffer.refactor(seq, dt)
 
         # that ends right before t. the last

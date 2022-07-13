@@ -474,12 +474,36 @@ def chunk_human_hcm_rnn():
     c3_chunk_learning() # Sequence Learning HCM
     return
 
+def test_kl_diagnostic():
+    for total_chunks in range(5,40):
+        for atomic in range(5,20):
+            nsim = 0
+            print('==============================================================')
+            for sl in [1000, 10000, 100000]:
+                cggt = generative_model_random_combination(D=total_chunks, n=atomic)
+                imagined_seq = cggt.imagination(sl, sequential=True, spatial=False, spatial_temporal=False)
+                kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cggt.M, Chunking_Graph(DT=0, theta=1))
+                print(kl)
+
+    return
 
 def test_cggt_generation_validity():
     for D in range(1,10):
         for n in range(4,10):
             cggt = generative_model_random_combination(D=D, n=n)
             print('D = ', D, ' n = ', n, ' sum =', np.sum(list(cggt.M.values())))
+    return
+
+
+def NN_interpretability():
+    activation = np.load('/kyb/rg/swu/Desktop/NN_interpretability/activation.npy', allow_pickle=True)
+    activation= activation.item()
+
+    whole_time_series = activation['1'][0, :, :, :]
+    time_series = np.array(whole_time_series)
+    seq = time_series.astype(int).reshape(time_series.shape)
+    cg = CG1(DT=0.1, theta=1.0, pad=40)  # initialize chunking part with specified parameters
+    cg, chunkrecord = hcm_rational(seq, cg,maxIter=5)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
     return
 
 def main():
@@ -517,6 +541,5 @@ def main():
     return
 
 if __name__ == "__main__":
-    rationalfmri()
     main()
 

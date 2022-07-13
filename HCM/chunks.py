@@ -77,7 +77,7 @@ class Chunk:
     # A code name unique to each chunk
     def __init__(self, chunkcontent, variable = [], count = 1, H = None,W = None, pad=1):
         """chunkcontent: a list of tuples describing the location and the value of observation"""
-        self.content = set(chunkcontent)
+        self.content = set(chunkcontent) # the first dimension is always time, the last is value
         self.variable = variable
         self.T = int(max(np.array(chunkcontent)[:, 0])+1) # those should be specified when joining a chunking graph
         self.H = H
@@ -193,22 +193,9 @@ class Chunk:
         for m in list(self.matching_seq.keys()): # iterate through content points
             thispt = list(m)
             n_pt = len(self.matching_seq[m])
-            otherpt0 = 0
-            otherpt1 = 0
-            otherpt2 = 0
-            otherpt3 = 0
-            for pt in self.matching_seq[m]:
-                otherpt0 += pt[0]-thispt[0]
-                otherpt1 += pt[1]-thispt[1]
-                otherpt2 += pt[2]-thispt[2]
-                otherpt3 += pt[3]-thispt[3]
             count = max(1, self.count)
-            thispt[0] = int(thispt[0]+1/count * otherpt0/n_pt)
-            thispt[1] = int(thispt[1]+1/count * otherpt1/n_pt)
-            thispt[2] = int(thispt[2]+1/count * otherpt2/n_pt)
-            thispt[3] = int(thispt[3]+1/count * otherpt3/n_pt)
-            if np.any(thispt) < 0:
-                print("")
+            for i in range(0, len(thispt)):
+                thispt[i] = int(thispt[0]+1/count * sum(map(lambda pt: pt[i]-thispt[i], self.matching_seq[m]))/n_pt)
             averaged_content.add(tuple(thispt))
 
         self.content = averaged_content
@@ -233,7 +220,8 @@ class Chunk:
         # key: chunk content, value: matching points
         D = self.D
         def dist(m,pt):
-            return (pt[0] - m[0])**2 + (pt[1] - m[1])**2 + (pt[2] - m[2])**2 + (pt[3] - m[3])**2
+            nD = len(m)
+            return sum(map(lambda i: (pt[i] - m[i])**2, range(nD)))
 
         def point_approx_seq(m, seq):# sequence is ordered in time
             for pt in seq:
@@ -289,9 +277,11 @@ class Chunk:
             pointcloud2.pop(minmatch[1])
         return minD
 
-    def pointdistance(self,x1,x2):
+    def pointdistance(self, x1, x2):
         ''' calculate the the distance between two points '''
-        D = (x1[0]-x2[0])*(x1[0]-x2[0]) + self.h*(x1[1]-x2[1])*(x1[1]-x2[1]) + self.w*(x1[2]-x2[2])*(x1[2]-x2[2]) + self.v*(x1[0]-x2[0])*(x1[0]-x2[0])
+        nD = len(x1)
+        for i in range(0, nD):
+            D = D + (x1[i]-x2[i])*(x1[i]-x2[i])
         return D
 
     def update_transition(self, chunkidx, dt):

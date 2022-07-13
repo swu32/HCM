@@ -133,7 +133,6 @@ def dirichlet_flat(N, sort=True):
 
 
 def generate_new_chunk(setofchunks):
-    zero = arr_to_tuple(np.zeros([1,1,1]))
     a = list(setofchunks)[
         np.random.choice(np.arange(0, len(setofchunks), 1))]  # better to be to choose based on occurrance probability
     b = list(setofchunks)[np.random.choice(np.arange(0, len(setofchunks), 1))]  # should exclude 0
@@ -144,7 +143,7 @@ def generate_new_chunk(setofchunks):
     vab[0:va.shape[0], :, :] = va
     vab[va.shape[0]:, :, :] = vb
     ab = arr_to_tuple(vab)
-    if ab in setofchunks or np.array_equal(a, zero) or np.array_equal(b, zero):
+    if ab in setofchunks:
         return generate_new_chunk(setofchunks)
     else:
         return ab, a, b
