@@ -98,9 +98,9 @@ def generate_random_hierarchical_sequence(marginals, s_length=10):
         """
         Check the generated sequences up to this moment overlap with pre-existing chunks.
         """
-        for chunk in clen.keys():
-            if chunk!=(((0,),),) and chunk != this_chunk and this_chunk!=(((0,),),) and clen(chunk)>len_this_chunk:
-                lenc = clen[chunk]
+        for chunk in clen:
+            lenc = clen[chunk]
+            if chunk!=(((0,),),) and chunk != this_chunk and this_chunk!=(((0,),),) and clen[chunk]>len_this_chunk:
                 tuple_seqchunk = arr_to_tuple(sequence[max(0,i + len_this_chunk-lenc):min(s_length, i + len_this_chunk),
                                            :, :])
                 if tuple_seqchunk == chunk:

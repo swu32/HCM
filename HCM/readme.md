@@ -4,7 +4,7 @@ A cognitively inspired representation learning algorithm that learns a hierarchy
 
 ### Running the code
 ```shell
-python ./HCM/main.py
+python main.py
 ```
 
 ### Folder Content

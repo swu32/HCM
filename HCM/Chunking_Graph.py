@@ -53,6 +53,38 @@ class Chunking_Graph:
         self.W = W
         return
 
+    def update_empty(self, n_empty):
+        """chunk: nparray converted to tuple format
+        Every time when a new chunk is identified, this function should be called """
+        ZERO = self.zero
+        self.M[ZERO] = self.M[ZERO] + n_empty
+        return
+
+    def update_transition_between_chunks(self, prev, current, dt):
+        """prev: previous chunk observation, represented by tuples
+            current: current chunk, in the tuple format
+            dt = 0"""
+        # at the moment, the transition needs to specify the temporal lag between the two chunks,
+        # dt: when the current element initiates after the initiation of prev
+        # if strictly temporal, then dt = len(prev)
+        # if strictly spatial, then dt = 0
+        chunk_pair_f = self.T
+        key_t = str(dt)
+
+        if prev in list(chunk_pair_f.keys()):
+            if key_t not in list(chunk_pair_f[prev].keys()):
+                chunk_pair_f[prev][key_t] = {}
+            if current in list(chunk_pair_f[prev][key_t].keys()):
+                chunk_pair_f[prev][key_t][current] = chunk_pair_f[prev][key_t][current] + 1
+            else:
+                chunk_pair_f[prev][key_t][current] = 1
+        else:
+            chunk_pair_f[prev] = {}
+            chunk_pair_f[prev][key_t] = {}
+            chunk_pair_f[prev][key_t][current] = 1
+
+        return
+
     def generate_empty(self):
         if self.zero == None:
             self.zero = Learning.arr_to_tuple(np.zeros([1, self.H, self.W]))

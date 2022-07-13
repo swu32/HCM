@@ -1,0 +1,18 @@
+name: hcm
+channels:
+  - conda-forge
+  - pytorch
+  - defaults
+dependencies:
+  - python
+  - bottleneck
+  - cffi
+  - mkl_fft
+  - mkl-service
+  - numexpr
+  - olefile
+  - pandas
+  - pillow
+  - scipy
+  - pytorch
+  - typing-extensions

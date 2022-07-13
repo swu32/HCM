@@ -506,8 +506,7 @@ def NN_interpretability():
     cg, chunkrecord = hcm_rational(seq, cg,maxIter=5)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
     return
 
-def main():
-    ################## Generative Model ################
+def generate_hierarchy_and_rational_learn():
     cggt = generative_model_random_combination(D=4, n=4)
     cggt = to_chunking_graph(cggt)
     seq = generate_random_hierarchical_sequence(cggt.M, s_length=500)
@@ -519,6 +518,11 @@ def main():
     # cg_gt = hierarchy1d()  # one dimensional chunks
     cg = Chunking_Graph(DT=0, theta=1)  # initialize chunking part with specified parameters
     cg = rational_chunking_all_info(seq, cg, maxit=5)
+    return
+
+def main():
+    ################## Generative Model ################
+    generate_hierarchy_and_rational_learn()
 
     ################# Measure KL to produce data for the convergence plot ##############
     convergence_hierarchy()
