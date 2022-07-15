@@ -75,13 +75,14 @@ class Chunk:
         """
 
     # A code name unique to each chunk
-    def __init__(self, chunkcontent, variable = [], count = 1, H = None,W = None, pad=1):
+    def __init__(self, chunkcontent, variable = [], count = 1, H = None,W = None, dims=[55, 55, 64],pad=1):
         """chunkcontent: a list of tuples describing the location and the value of observation"""
         self.content = set(chunkcontent) # the first dimension is always time, the last is value
         self.variable = variable
         self.T = int(max(np.array(chunkcontent)[:, 0])+1) # those should be specified when joining a chunking graph
         self.H = H
         self.W = W
+        self.dimensions = dims # middle dimensions, excluding the time dimension and the value dimension
         self.index = None
         self.count = count #
         self.pad = pad
@@ -91,7 +92,7 @@ class Chunk:
         self.indexloc = self.get_index()
         self.arraycontent = None
         self.boundarycontent = set()
-        T,H,W,cRidx = self.get_index_padded()
+        self.get_index_padded()
         self.D = 10
         self.matching_threshold = 0.8
         self.matching_seq = {}
@@ -133,7 +134,7 @@ class Chunk:
 
     def to_array(self):
         '''convert the content into array'''
-        arrep = np.zeros((int(max(np.atleast_2d(np.array(list(self.content)))[:, 0])+1),self.H,self.W))
+        arrep = np.zeros((int(max(np.atleast_2d(np.array(list(self.content)))[:, 0])+1), *self.dimensions))
         for t,i,j,v in self.content:
             arrep[t,i,j] = v
         self.arraycontent = arrep
@@ -154,24 +155,21 @@ class Chunk:
         ''' Get padded index arund the nonzero chunk locations '''
         padded_index = self.indexloc.copy()
         chunkcontent = self.content
-        self.boundarycontent = set()
-        T,H,W = self.T,self.H, self.W
-        for t, i, j, v in chunkcontent:
-            point_pad = {(t + 1, i, j), (t - 1, i, j), (t, min(i + 1, H), j), (t, max(i - 1, 0), j),
-                                   (t, i, min(j + 1, W)), (t, i, max(j - 1, 0))}
+        for p in range(1, self.pad+1):
+            for c in chunkcontent:
+                padded_boundary_set = set()
+                for d in range(0, len(c)-1):
+                    contentloc = list(c)[:-1].copy() # excluding value within content
+                    contentloc[d] = min(contentloc[d] + p, self.dimensions[d])
+                    padded_boundary_set.add(tuple(contentloc))
+                    contentloc = list(c)[:-1].copy()
+                    contentloc[d] = max(contentloc[d] - p, 0)
+                    padded_boundary_set.add(tuple(contentloc))
+                    if p == 1 and padded_boundary_set.issubset(self.indexloc) == False:
+                        self.boundarycontent.add(c) # add chunk content to the boundary content of this chunk
+                padded_index = padded_index.union(padded_boundary_set)
 
-            if point_pad.issubset(self.indexloc) == False: # the current content is a boundary element
-                self.boundarycontent.add((t,i,j,v))
-            padded_index = padded_index.union(point_pad)
-
-        if self.pad > 1: # pad extra layers around the chunk observations
-            # there is max height, and max width, but there is no max time.
-            for p in range(2, self.pad+1):
-                for t, i, j, v in chunkcontent:
-                    padded_boundary_set = {(t + p, i, j), (t - p, i, j), (t, min(i + p, H), j),
-                                           (t, max(i - p, 0), j), (t, i, min(j + p, W)), (t, i, max(j - p, 0))}
-                    padded_index = padded_index.union(padded_boundary_set)
-        return T, H, W, padded_index
+        return padded_index
 
     def conflict(self, c_):
 
@@ -180,7 +178,7 @@ class Chunk:
     def concatinate(self, cR):
         if self.check_adjacency(cR):
             clcrcontent = self.content | cR.content
-            clcr = Chunk(list(clcrcontent), H=self.H, W=self.W, pad = cR.pad)
+            clcr = Chunk(list(clcrcontent), H=self.H, W=self.W, pad=cR.pad, dims= self.dimensions)
             return clcr
         else:
             return None
@@ -216,7 +214,7 @@ class Chunk:
 
     def check_match(self, seq):
         ''' Check explicit content match'''
-        self.matching_seq = {} # free up memory
+        self.matching_seq = {}# free up memory
         # key: chunk content, value: matching points
         D = self.D
         def dist(m,pt):
@@ -246,7 +244,7 @@ class Chunk:
     def check_adjacency(self, cR):
         """Check if two chunks overlap/adjacent in their content and location"""
         cLidx = self.indexloc
-        T,H,W,cRidx = cR.get_index_padded()
+        cRidx = cR.get_index_padded()
         intersect_location = cLidx.intersection(cRidx)
         if len(intersect_location) > 0: # as far as the padded chunk and another is intersecting,
             return True
@@ -280,6 +278,7 @@ class Chunk:
     def pointdistance(self, x1, x2):
         ''' calculate the the distance between two points '''
         nD = len(x1)
+        D = 0
         for i in range(0, nD):
             D = D + (x1[i]-x2[i])*(x1[i]-x2[i])
         return D

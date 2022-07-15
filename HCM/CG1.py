@@ -141,6 +141,10 @@ class CG1:
         self.W = W
         return
 
+    def update_dimensions(self, dims):
+        self.dimensions = dims
+        return
+
     def get_nonzeroM(self):
         nzm = list(self.M.keys()).copy()
         nzmm = nzm.copy()
@@ -313,7 +317,7 @@ class CG1:
         if cr.count == 0 or (n - cr.count) == 0:
             return True  # not enough data
 
-        # Expected
+        # # Expected
         ep1p1 = cl.count / n * cr.count
         ep1p0 = cl.count / n * (n - cr.count)
         ep0p1 = (n - cl.count) / n * cr.count
@@ -330,10 +334,14 @@ class CG1:
                     if cridx in list(ncl.adjacency[dt].keys()):
                         op0p1 = op0p1 + ncl.adjacency[dt][cridx]
                         for ncridx in list(ncl.adjacency[dt].keys()):
-                            if ncridx != cr:
+                            if ncridx != cr.index:
                                 op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
 
-        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        obs = [op1p1, op1p0, op0p1, op0p0]
+        exp = [ep1p1, ep1p0, ep0p1, ep0p0]
+        obs = [item/sum(obs) for item in obs]
+        exp = [item/sum(exp) for item in exp]
+        _, pvalue = stats.chisquare(obs, f_exp=exp, ddof=1)
         if pvalue < threshold:
             return False  # reject independence hypothesis, there is a correlation
         else:

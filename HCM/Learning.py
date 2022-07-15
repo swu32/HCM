@@ -185,8 +185,11 @@ def threshold_chunking_mtx(prev, current, combined_chunk, dt, cg):
         if ep0p0 <= 3 or ep1p1 <= 3 or ep1p0 <= 3 or ep0p1 <= 3:
             print('not enough observations')
             return True  # cannot continute the test because of lack of sample size
-
-        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        obs = [op1p1, op1p0, op0p1, op0p0]
+        exp = [ep1p1, ep1p0, ep0p1, ep0p0]
+        obs = [item/sum(obs) for item in obs]
+        exp = [item/sum(exp) for item in exp]
+        _, pvalue = stats.chisquare(obs, f_exp=exp, ddof=1)
         if pvalue == 0.0:
             print('check')
         if pvalue < 0.05:
@@ -270,8 +273,11 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
                         for ncridx in list(ncl.adjacency[dt].keys()):
                             if ncridx != cr:
                                 op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
-
-        _, pvalue = stats.chisquare([op1p1, op1p0, op0p1, op0p0], f_exp=[ep1p1, ep1p0, ep0p1, ep0p0], ddof=1)
+        obs = [op1p1, op1p0, op0p1, op0p0]
+        exp = [ep1p1, ep1p0, ep0p1, ep0p0]
+        obs = [item/sum(obs) for item in obs]
+        exp = [item/sum(exp) for item in exp]
+        _, pvalue = stats.chisquare(obs, f_exp=exp, ddof=1)
         if pvalue < 0.05:
             return False  # reject independence hypothesis, there is a correlation
         else:
@@ -1228,6 +1234,8 @@ def independence_test(pM, pT, N):
             oclcr = pM[cl] * pT[cl][cr] * N  # number of observations
             f_exp.append(pclcr)
             f_obs.append(oclcr)
+    f_exp = [item/sum(f_exp) for item in f_exp]
+    f_obs = [item / sum(f_obs) for item in f_obs]
     df = (len(B) - 1) ** 2
     _, pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
 
