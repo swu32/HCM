@@ -10,6 +10,7 @@ from PIL import Image
 import os
 from chunks import *
 import pickle
+from PARSER import *
 
 
 def convergence_hierarchy():
@@ -21,10 +22,11 @@ def convergence_hierarchy():
     df['kl'] = []
     df['type'] = []
     df['d'] = []
-    n_sample = 50 #number of samples used for a particular uncommital generative model
+    df['seql'] = []
+    n_sample = 5 #number of samples used for a particular uncommital generative model
     n_atomic = 5
-    ds = [3, 4, 5, 6, 7, 8] # depth of the generative model
-    Ns = np.arange(100, 3000, 100)
+    ds = [3, 5, 7, 8] # depth of the generative model
+    Ns = np.arange(200, 3000, 200)
     for d in ds: # varying depth, and the corresponding generative model it makes
         depth = d
         for i in range(0, n_sample):
@@ -39,21 +41,34 @@ def convergence_hierarchy():
                 cg = rational_chunking_all_info(seq, cg)
                 imagined_seq = cg.imagination(n, sequential=True, spatial=False, spatial_temporal=False)
                 kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
-
-                imagined_seq = NN_testing(seq) # comparison with an RNN
-                imagined_seq = np.array(imagined_seq).reshape([len(imagined_seq), 1, 1])
-                klnn = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
-
-                # take in data:
                 df['N'].append(n)
                 df['d'].append(depth)
                 df['kl'].append(kl)
                 df['type'].append('ck')
+                df['seql'].append(0) # not applicable
 
+                speech = list((seq.flatten().astype('int')))
+                speech = ''.join(str(e) for e in speech)
+                learned_ps,_ = PARSER(speech,PS = dict(zip(np.arange(0, n_atomic, 1), [0] * n_atomic)))
+                imagined_seq = parser_imagination(learned_ps,n)
+                kl_parser = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
                 df['N'].append(n)
                 df['d'].append(depth)
-                df['kl'].append(klnn)
-                df['type'].append('nn')
+                df['kl'].append(kl_parser)
+                df['type'].append('parser')
+                df['seql'].append(0)  # not applicable
+
+                for seql in [50]:
+                    imagined_seq,p = NN_testing(seq, seql = seql) # comparison with an RNN
+                    imagined_seq = np.array(imagined_seq).reshape([len(imagined_seq), 1, 1])
+                    klnn = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
+                    df['N'].append(n)
+                    df['d'].append(depth)
+                    df['kl'].append(klnn)
+                    df['type'].append('nn')
+                    df['seql'].append(seql)
+
+
 
     df = pd.DataFrame.from_dict(df)
     df.to_pickle('../OutputData/KL_rational_learning_N')  # where to save it, usually as a .pkl
@@ -61,14 +76,16 @@ def convergence_hierarchy():
 
 
 
-def NN_testing(sequence):
+def NN_testing(sequence, seql = 3):
     """Train an RNN to learn sequence and generated imagination based on the learned representations by RNN"""
     # convert the sequence into lists
     # Ns = np.arange(50, 3000, 50)# the length of sequence decided to show neural networks
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-epochs', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=5)
-    parser.add_argument('--sequence-length', type=int, default=3)
+    parser.add_argument('--sequence-length', type=int, default=seql)
+    parser.add_argument('--learning-rate', type=float, default=0.1)
+
     args = parser.parse_args()
 
     dataset = Dataset(sequence, args)
@@ -354,6 +371,8 @@ def c3_chunk_learning():
     return
 
 
+
+
 def rt_human_hcm_rnn():
     """Simulate reaction time for HCM and RNN on SRT task"""
     import pickle
@@ -472,6 +491,7 @@ def chunk_human_hcm_rnn():
     """Chunking behavior of hcm and rnn on human SRT task"""
     c3_RNN() # Sequence Learning RNN
     c3_chunk_learning() # Sequence Learning HCM
+    c3_parser_learning() # learning sequence from PARSER
     return
 
 def test_kl_diagnostic():
@@ -545,5 +565,7 @@ def main():
     return
 
 if __name__ == "__main__":
+
+    convergence_hierarchy()
     main()
 
