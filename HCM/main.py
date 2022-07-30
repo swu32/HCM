@@ -104,32 +104,55 @@ def c3_RNN():
     parser.add_argument('--max-epochs', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=5)
     parser.add_argument('--sequence-length', type=int, default=5)
-    parser.add_argument('--learning-rate', type=float, default=0.1)
+    parser.add_argument('--learning-rate', type=float, default=0.001)
     args = parser.parse_args()
     predicted_seq = []#list(sequence[0:start].flatten())
     prob = []#[0.25]*start
     ID = []
     learning_rate = []
+    model_type = []
     n_sample = 50
-    for lr in [0.1,0.01,0.001]:
+    for lr in [0.001]:
         args.learning_rate = lr
         for s in range(0, n_sample): # across 30 runs
             for idx in range(200, 800):
+                pre_l = 20
                 dataset = Dataset(sequence[0:idx-1], args) # use all of the past dataset to train
                 model = Model(dataset)
                 train(dataset, model, args) # train another model from scratch.
-                pre_l = 20
                 p_next = evaluate_next_word_probability(model, sequence[idx], words=list(sequence[max(idx-pre_l,0):idx,:,:].flatten()))
                 predicted_seq.append(sequence[idx])
                 prob.append(p_next)
                 ID.append(s)
                 learning_rate.append(lr)
+                model_type.append('model0')
+
+                model1 = Model1(dataset)
+                train(dataset, model1, args)  # train another model from scratch.
+                p_next = evaluate_next_word_probability(model1, sequence[idx],
+                                                        words=list(sequence[max(idx - pre_l, 0):idx, :, :].flatten()))
+                predicted_seq.append(sequence[idx])
+                prob.append(p_next)
+                ID.append(s)
+                learning_rate.append(lr)
+                model_type.append('model1')
+
+                model2 = Model2(dataset)
+                train(dataset, model2, args)  # train another model from scratch.
+                p_next = evaluate_next_word_probability(model2, sequence[idx],
+                                                        words=list(sequence[max(idx - pre_l, 0):idx, :, :].flatten()))
+                predicted_seq.append(sequence[idx])
+                prob.append(p_next)
+                ID.append(s)
+                learning_rate.append(lr)
+                model_type.append('model2')
 
     df = {}
     df['seq'] = predicted_seq
     df['prob'] = prob
     df['id'] = ID
     df['learning_rate'] = learning_rate
+    df['model_type'] = model_type
 
     import pickle
     with open('../OutputData/c3_RNN.pkl', 'wb') as f:
@@ -137,7 +160,7 @@ def c3_RNN():
     return
 
 
-def p_RNN(trainingseq):
+def p_RNN(trainingseq, MODEL = Model):
     """Train neural network on SRT instruction sequences
                 Returns:
                     prob (list): prediction probability of the instruction
@@ -154,9 +177,9 @@ def p_RNN(trainingseq):
     args = parser.parse_args()
     start = 10
     prob = [0.25]*start
-    for idx in range(start, trainingseq.shape[0]):
+    for idx in range(start, len(trainingseq)):
         dataset = Dataset(sequence[:idx,:,:], args)  # use all of the past dataset to train
-        model = Model(dataset)
+        model = MODEL(dataset)
         train(dataset, model, args)  # train another model from scratch.
         pre_l = 10
         p_next = evaluate_next_word_probability(model, sequence[idx], words=list(sequence[max(idx-pre_l,0):idx,:,:].flatten()))
@@ -350,10 +373,10 @@ def c3_chunk_learning():
 
     hcm_chunk_record = {}
 
-    for ID in range(0, 50): # across 30 runs
+    for ID in range(0, 30): # across 30 runs
         hcm_chunk_record[ID] = []
         seq = np.array(generateseq('c3', seql=600)).reshape((600, 1, 1))
-        cg = CG1(DT=0.0, theta=0.92)  # initialize chunking part with specified parameters
+        cg = CG1(DT=0.0, theta=0.90)  # initialize chunking part with specified parameters
         cg, chunkrecord = hcm_learning(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
         for time in list(chunkrecord.keys()):
             df['time'].append(int(time))
@@ -378,12 +401,17 @@ def rt_human_hcm_rnn():
     import pickle
     data = {}
     data['id'] = []
-    data['p_rnn'] = []
-    data['p_hcm'] = []
+    data['p_rnn_m0'] = []
+    data['p_rnn_m1'] = []
+    data['p_rnn_m2'] = []
+    data['p_hcm0'] = []
+    data['p_hcm1'] = []
+    data['p_hcm2'] = []
+    data['p_parser'] = []
     data['seq'] = []
     data['rt'] = []
     # can also load from subject 59
-    dfsubject = pd.read_csv('../human_data/filtered_exp1.csv')
+    dfsubject = pd.read_csv('../InputData/human_data/filtered_exp1.csv')
     print(np.unique(dfsubject[dfsubject['condition'] == 2]['id']))
     for subj in np.unique(dfsubject[dfsubject['condition'] == 2]['id']):# iterate over all subjects in c3 chunk condition
         print('subj ', subj)
@@ -398,12 +426,21 @@ def rt_human_hcm_rnn():
             if press == list(dfsubject[dfsubject['id'] == subj]['keyassignment'])[0][17]:
                 subseq.append(4)
         trainingseq = subseq[200:800]
-        p_hcm = hcm_c3_probability(trainingseq)
-        p_rnn = p_RNN(trainingseq)
+        p_hcm0,p_hcm1, p_hcm2 = hcm_c3_probability(trainingseq)
+        p_rnn_m0 = p_RNN(trainingseq, MODEL=Model)
+        p_rnn_m1 = p_RNN(trainingseq, MODEL=Model1)
+        p_rnn_m2 = p_RNN(trainingseq, MODEL=Model2)
 
-        data['id'] += [subj]*len(p_hcm)
-        data['p_rnn'] += p_rnn
-        data['p_hcm'] += p_hcm
+        p_parser = PARSER_c3_probability(trainingseq)
+
+        data['id'] += [subj]*len(p_hcm0)
+        data['p_rnn_m0'] += p_rnn_m0
+        data['p_rnn_m1'] += p_rnn_m1
+        data['p_rnn_m2'] += p_rnn_m2
+        data['p_hcm0'] += p_hcm0
+        data['p_hcm1'] += p_hcm1
+        data['p_hcm2'] += p_hcm2
+        data['p_parser'] += p_parser
         data['seq'] += trainingseq
         data['rt'] += list(dfsubject[dfsubject['id'] == subj]['timecollect'])[200:800]
 
@@ -415,18 +452,26 @@ def hcm_c3_probability(training_seq):
     ''' Evaluate prediction probability of HCM trained on SRT instruction sequences '''
     time_series = np.array(training_seq).reshape([-1,1,1])
     seq = time_series.astype(int)
-    cg = CG1(DT=0.1, theta=0.96)  # initialize chunking part with specified parameters
+    cg = CG1(DT=0.1, theta=0.90)  # initialize chunking part with specified parameters
     cg, chunkrecord = hcm_learning(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
-    p = []
-    eps = 0.05
+    p0 = []
+    p1 = []
+    p2 = []
     for t in range(0, len(seq)):
         if t in list(chunkrecord.keys()):
             freq = chunkrecord[t][0][1]
-            p.append(freq/t)
+            p0.append(freq/t)
+            p1.append(freq / t)
+            p2.append(freq / t)
         else:# a within-chunk element
-            p.append(1 - 4*eps)
+            eps = 0.01
+            p0.append(1 - 4*eps)
+            eps = 0.05
+            p1.append(1 - 4 * eps)
+            eps = 0.1
+            p2.append(1 - 4 * eps)
 
-    return p
+    return p0,p1,p2
 
 
 def transferinterferenceexperiment():
@@ -489,9 +534,11 @@ def transferinterferenceexperiment():
 
 def chunk_human_hcm_rnn():
     """Chunking behavior of hcm and rnn on human SRT task"""
-    c3_RNN() # Sequence Learning RNN
     c3_chunk_learning() # Sequence Learning HCM
+
     c3_parser_learning() # learning sequence from PARSER
+
+    c3_RNN() # Sequence Learning RNN
     return
 
 def test_kl_diagnostic():
@@ -540,6 +587,97 @@ def generate_hierarchy_and_rational_learn():
     cg = rational_chunking_all_info(seq, cg, maxit=5)
     return
 
+
+def sensitivity_analysis():
+    def noise_perturbation(seq, eps=0, n=1):
+        for i in range(0, seq.shape[0]):
+            if np.random.uniform(0,1) < eps:
+                seq[i, :, :] = np.random.choice(np.arange(0, n))
+        return seq
+
+    """Experiment on how learning convergence with increasing hierarchy depth is sensitive on perturbations"""
+    df = {}
+
+    df['N'] = []
+    df['kl'] = []
+    df['type'] = []
+    df['d'] = []
+    df['eps'] = []
+    n_sample = 5 #number of samples used for a particular uncommital generative model
+    n_atomic = 5
+    ds = [3,5,8] # depth of the generative model
+    Ns = np.arange(100, 1000, 100)
+    for d in ds: # varying depth, and the corresponding generative model it makes
+        depth = d
+        for i in range(0, n_sample):
+            # in every new sample, a generative model is proposed.
+            cg_gt = generative_model_random_combination(D=depth, n=n_atomic)
+            cg_gt = to_chunking_graph(cg_gt)
+            for n in Ns:
+                for eps in [0, 0.001, 0.01, 0.1]:
+                    print({' d ': d, ' i ': i, ' n ': n })
+                    # cg_gt = hierarchy1d() #one dimensional chunks
+                    seq = generate_random_hierarchical_sequence(cg_gt.M, s_length=n)
+                    seq = noise_perturbation(seq, eps = eps, n = n_atomic)
+                    cg = Chunking_Graph(DT=0, theta=1)  # initialize chunking part with specified parameters
+                    cg = rational_chunking_all_info(seq, cg)
+                    imagined_seq = cg.imagination(n, sequential=True, spatial=False, spatial_temporal=False)
+                    kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
+                    df['N'].append(n)
+                    df['d'].append(depth)
+                    df['kl'].append(kl)
+                    df['type'].append('ck')
+                    df['eps'].append(eps)
+
+    df = pd.DataFrame.from_dict(df)
+    df.to_csv('../OutputData/sensitivity_analysis')
+    return
+
+
+def phase_shift_analysis():
+
+
+    """Experiment on how learning convergence with increasing hierarchy depth is sensitive on perturbations"""
+    df = {}
+
+    df['N'] = []
+    df['kl'] = []
+    df['type'] = []
+    df['d'] = []
+    df['phase_shift'] = []
+    n_sample = 5 #number of samples used for a particular uncommital generative model
+    n_atomic = 5
+    ds = [5] # depth of the generative model
+    Ns = np.arange(100, 1000, 100)
+    for d in ds: # varying depth, and the corresponding generative model it makes
+        depth = d
+        for i in range(0, n_sample):
+            # in every new sample, a generative model is proposed.
+            cg_gt = generative_model_random_combination(D=depth, n=n_atomic)
+            cg_gt = to_chunking_graph(cg_gt)
+            for n in Ns:
+                for step in range(0,20):
+
+                    print({' d ': d, ' i ': i, ' n ': n })
+                    # cg_gt = hierarchy1d() #one dimensional chunks
+                    seq = generate_random_hierarchical_sequence(cg_gt.M, s_length=n)
+                    seq = np.roll(seq, step)
+
+                    cg = Chunking_Graph(DT=0, theta=1)  # initialize chunking part with specified parameters
+                    cg = rational_chunking_all_info(seq, cg)
+                    imagined_seq = cg.imagination(n, sequential=True, spatial=False, spatial_temporal=False)
+                    kl = evaluate_KL_compared_to_ground_truth(imagined_seq, cg_gt.M, Chunking_Graph(DT=0, theta=1))
+                    df['N'].append(n)
+                    df['d'].append(depth)
+                    df['kl'].append(kl)
+                    df['type'].append('hcm')
+                    df['phase_shift'].append(step)
+
+
+    df = pd.DataFrame.from_dict(df)
+    df.to_csv('../OutputData/phase_shift_analysis')
+    return
+
 def main():
     ################## Generative Model ################
     generate_hierarchy_and_rational_learn()
@@ -562,10 +700,20 @@ def main():
 
     ################ fMRI data #########################
     fmri()
+    ##############################################
+    sensitivity_analysis()
+    ##############################################
+    phase_shift_analysis()
+
     return
 
 if __name__ == "__main__":
+    rt_human_hcm_rnn()
 
-    convergence_hierarchy()
+    chunk_human_hcm_rnn()
+
+
+    generate_hierarchy_and_rational_learn()
+
     main()
 

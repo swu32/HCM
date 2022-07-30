@@ -275,8 +275,8 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
                                 op0p0 = op0p0 + ncl.adjacency[dt][ncridx]
         obs = [op1p1, op1p0, op0p1, op0p0]
         exp = [ep1p1, ep1p0, ep0p1, ep0p0]
-        obs = [item/sum(obs) for item in obs]
-        exp = [item/sum(exp) for item in exp]
+        # obs = [item/sum(obs) for item in obs]
+        # exp = [item/sum(exp) for item in exp]
         _, pvalue = stats.chisquare(obs, f_exp=exp, ddof=1)
         if pvalue < 0.05:
             return False  # reject independence hypothesis, there is a correlation
@@ -289,7 +289,7 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
     chunked = False  # unless later it was verified to fit into the chunking criteria.
     cat = combined_chunk
     chunk_f = cg.chunks
-    N = 3
+    N = 10
     # the prevchunkindex needs to be in the list of all of the chunks
     prev = cg.chunks[prev_idx]
     if dt in list(prev.adjacency.keys()):
@@ -1116,6 +1116,7 @@ def hcm_learning(arayseq, cg, learn=True):
         # previous and current chunk
         if learn == True:
             cg.forget()
+        maxchunksize = max([len(item) for item in cg.visible_chunk_list])
         Buffer.reloadsize = maxchunksize + 1
         Buffer.checkreload(arayseq)
         seq_over = Buffer.checkseqover()
@@ -1234,8 +1235,8 @@ def independence_test(pM, pT, N):
             oclcr = pM[cl] * pT[cl][cr] * N  # number of observations
             f_exp.append(pclcr)
             f_obs.append(oclcr)
-    f_exp = [item/sum(f_exp) for item in f_exp]
-    f_obs = [item / sum(f_obs) for item in f_obs]
+    # f_exp = [item/sum(f_exp) for item in f_exp]
+    # f_obs = [item / sum(f_obs) for item in f_obs]
     df = (len(B) - 1) ** 2
     _, pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
 
@@ -1287,7 +1288,7 @@ def rational_chunking_all_info(seq, cg, maxit=4):
                 (op0p1 - p0p1) / p0p1) ** 2
                          + p0p0 * ((op0p0 - p0p0) / p0p0) ** 2)
         pvalue = stats.chi2.pdf(chisquare, 1)
-        if pvalue < 0.0005:
+        if pvalue < 0.05:
             return False  # reject independence hypothesis, there is a correlation
         else:
             return True

@@ -41,13 +41,18 @@ def PARSER(speech, PS = {'1':1,'2':1,'3':1,'4':1}, return_history = False):
             and PS[ speech[component_start : (component_end + 1)] ] >= 1:
                 component_end += 1
 
-            # print('longest unit found: ' + str(speech[component_start : component_end]))
+
             components.append(speech[component_start : component_end])
             i = component_end
             component = speech[component_start : component_end]
-            comp_p = PS[component]/sum([PS[comp] for comp in list(PS.keys())])
+            denum =sum([PS[comp] for comp in list(PS.keys())])
+            if denum>0 and component in list(PS.keys()):
+                comp_p = PS[component]/denum
+            else:
+                comp_p = 0
             percept_history[i] = (component, comp_p)# components, and their occurrence probabilities
             #print "component_end: " + str(component_end)
+
 
             if i == len(speech):
                 break

@@ -72,7 +72,7 @@ class CG1:
     hypothesis_test:
     """
 
-    def __init__(self, y0=0, x_max=0, DT=0.01, theta=0.75, pad=1):
+    def __init__(self, y0=0, x_max=0, DT=0.01, theta=0.95, pad=1):
         self.vertex_list = []
         self.vertex_location = []
         self.visible_chunk_list = []
