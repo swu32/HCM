@@ -65,6 +65,7 @@ class Model1(nn.Module):
 
 
 class Model2(nn.Module):
+
     def __init__(self, dataset):
         super(Model2, self).__init__()
         self.lstm_size = 40

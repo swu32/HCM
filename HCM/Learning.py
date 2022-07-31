@@ -289,7 +289,7 @@ def threshold_chunking(prev_idx, current_idx, combined_chunk, dt, cg):
     chunked = False  # unless later it was verified to fit into the chunking criteria.
     cat = combined_chunk
     chunk_f = cg.chunks
-    N = 10
+    N = 5
     # the prevchunkindex needs to be in the list of all of the chunks
     prev = cg.chunks[prev_idx]
     if dt in list(prev.adjacency.keys()):
