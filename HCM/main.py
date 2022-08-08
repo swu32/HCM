@@ -465,7 +465,7 @@ def hcm_c3_probability(training_seq):
             p2.append(freq / t)
         else:# a within-chunk element
             eps = 0.01
-            p0.append(1 - 4*eps)
+            p0.append(1 - 4* eps)
             eps = 0.05
             p1.append(1 - 4 * eps)
             eps = 0.1
