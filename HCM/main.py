@@ -103,7 +103,7 @@ def c3_RNN():
     parser = argparse.ArgumentParser()
     parser.add_argument('--max-epochs', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=5)
-    parser.add_argument('--sequence-length', type=int, default=5)
+    parser.add_argument('--sequence-length', type=int, default=3)
     parser.add_argument('--learning-rate', type=float, default=0.001)
     args = parser.parse_args()
     predicted_seq = []#list(sequence[0:start].flatten())
@@ -169,9 +169,9 @@ def p_RNN(trainingseq, MODEL = Model):
     sequence[0:5,:,:] = np.array([0,1,2,3,4]).reshape((5,1,1))
     #sequence = np.array(generateseq('c3', seql=600)).reshape((600, 1, 1))
     parser = argparse.ArgumentParser()
-    parser.add_argument('--max-epochs', type=int, default=5)
+    parser.add_argument('--max-epochs', type=int, default=1)
     parser.add_argument('--batch-size', type=int, default=5)
-    parser.add_argument('--sequence-length', type=int, default=5)
+    parser.add_argument('--sequence-length', type=int, default=3)
     parser.add_argument('--learning-rate', type=float, default=0.001)
 
     args = parser.parse_args()
@@ -257,7 +257,7 @@ def squidgifmoving():
     totalseq = totalseq.astype(int)
     # cg = Chunking_Graph(DT=0.1, theta=0.98)  # initialize chunking part with specified parameters
     # cg = learn_stc_classes(totalseq, cg)
-    cg = CG1(DT=0.1, theta=0.996, pad=1)  # initialize chunking part with specified parameters
+    cg = CG1(DT=0.01, theta=0.996, pad=1)  # initialize chunking part with specified parameters
     cg, chunkrecord = hcm_learning(totalseq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
     cg.convert_chunks_in_arrays()
     print(totalseq.shape)
@@ -346,7 +346,7 @@ def visual_chunks():
     cg_gt = compositional_imgs()
     n = 2000
     seq = generate_hierarchical_sequence(cg_gt.M, s_length=n)
-    cg = CG1(DT=0.1, theta=0.96)
+    cg = CG1(DT=0.01, theta=0.996)
     cg,_ = hcm_learning(seq, cg)
     cg.convert_chunks_in_arrays()
     cg.save_graph(name='visual_chunks')
@@ -401,16 +401,11 @@ def rt_human_hcm_rnn():
     import pickle
     data = {}
     data['id'] = []
-    data['p_rnn_m0'] = []
-    data['p_rnn_m1'] = []
-    data['p_rnn_m2'] = []
-    data['p_hcm0'] = []
-    data['p_hcm1'] = []
-    data['p_hcm2'] = []
+    data['p_rnn_m'] = []
+    data['p_hcm'] = []
     data['p_parser'] = []
     data['seq'] = []
     data['rt'] = []
-    # can also load from subject 59
     dfsubject = pd.read_csv('../InputData/human_data/filtered_exp1.csv')
     print(np.unique(dfsubject[dfsubject['condition'] == 2]['id']))
     for subj in np.unique(dfsubject[dfsubject['condition'] == 2]['id']):# iterate over all subjects in c3 chunk condition
@@ -426,20 +421,14 @@ def rt_human_hcm_rnn():
             if press == list(dfsubject[dfsubject['id'] == subj]['keyassignment'])[0][17]:
                 subseq.append(4)
         trainingseq = subseq[200:800]
-        p_hcm0,p_hcm1, p_hcm2 = hcm_c3_probability(trainingseq)
-        p_rnn_m0 = p_RNN(trainingseq, MODEL=Model)
-        p_rnn_m1 = p_RNN(trainingseq, MODEL=Model1)
-        p_rnn_m2 = p_RNN(trainingseq, MODEL=Model2)
+        p_hcm = hcm_c3_probability(trainingseq)
+        p_rnn = p_RNN(trainingseq, MODEL=Model)
 
         p_parser = PARSER_c3_probability(trainingseq)
 
-        data['id'] += [subj]*len(p_hcm0)
-        data['p_rnn_m0'] += p_rnn_m0
-        data['p_rnn_m1'] += p_rnn_m1
-        data['p_rnn_m2'] += p_rnn_m2
-        data['p_hcm0'] += p_hcm0
-        data['p_hcm1'] += p_hcm1
-        data['p_hcm2'] += p_hcm2
+        data['id'] += [subj]*len(p_hcm)
+        data['p_rnn'] += p_rnn
+        data['p_hcm'] += p_hcm
         data['p_parser'] += p_parser
         data['seq'] += trainingseq
         data['rt'] += list(dfsubject[dfsubject['id'] == subj]['timecollect'])[200:800]
@@ -454,24 +443,18 @@ def hcm_c3_probability(training_seq):
     seq = time_series.astype(int)
     cg = CG1(DT=0.1, theta=0.90)  # initialize chunking part with specified parameters
     cg, chunkrecord = hcm_learning(seq, cg)  # with the rational chunk models, rational_chunk_all_info(seq, cg)
-    p0 = []
-    p1 = []
-    p2 = []
+    p = []
+
     for t in range(0, len(seq)):
         if t in list(chunkrecord.keys()):
             freq = chunkrecord[t][0][1]
             p0.append(freq/t)
-            p1.append(freq / t)
-            p2.append(freq / t)
+
         else:# a within-chunk element
             eps = 0.01
-            p0.append(1 - 4* eps)
-            eps = 0.05
-            p1.append(1 - 4 * eps)
-            eps = 0.1
-            p2.append(1 - 4 * eps)
+            p.append(1 - 4* eps)
 
-    return p0,p1,p2
+    return p
 
 
 def transferinterferenceexperiment():
@@ -495,7 +478,7 @@ def transferinterferenceexperiment():
     for s in range(0, n_sample):
         for n in Ns:
             # train on facilitative environment
-            fccg_trained = Chunking_Graph(DT=0.01, theta=0.99)
+            fccg_trained = Chunking_Graph(DT=0.01, theta=0.996)
             fccg_trained.M = cg_trained.M.copy()
             fccg_trained.vertex_list = cg_trained.vertex_list.copy()
             fccg_trained.edge_list = cg_trained.edge_list.copy()
@@ -504,12 +487,12 @@ def transferinterferenceexperiment():
 
             faci_seq = generate_hierarchical_sequence(fac_env.M, s_length=n)
 
-            naive = Chunking_Graph(DT=0.01, theta=0.99)
+            naive = Chunking_Graph(DT=0.01, theta=0.996)
             klfaci = transfer_train_measure_KL(fccg_trained, fac_env, faci_seq)
             klnaivefaci = transfer_train_measure_KL(naive, fac_env, faci_seq)
 
             # train on interfering environment
-            iccg_trained = Chunking_Graph(DT=0.01, theta=0.99)
+            iccg_trained = Chunking_Graph(DT=0.01, theta=0.996)
             iccg_trained.M = cg_trained.M.copy()
             iccg_trained.vertex_list = cg_trained.vertex_list.copy()
             iccg_trained.edge_list = cg_trained.edge_list.copy()
@@ -518,7 +501,7 @@ def transferinterferenceexperiment():
 
             inte_seq = generate_hierarchical_sequence(int_env.M, s_length=n)
 
-            naive = Chunking_Graph(DT=0.01, theta=0.99)
+            naive = Chunking_Graph(DT=0.01, theta=0.996)
             klinte = transfer_train_measure_KL(iccg_trained, int_env, inte_seq)
             klnaiveinte = transfer_train_measure_KL(naive, int_env, inte_seq)
             print('')
@@ -636,7 +619,6 @@ def sensitivity_analysis():
 
 def phase_shift_analysis():
 
-
     """Experiment on how learning convergence with increasing hierarchy depth is sensitive on perturbations"""
     df = {}
 
@@ -708,12 +690,5 @@ def main():
     return
 
 if __name__ == "__main__":
-    rt_human_hcm_rnn()
-
-    chunk_human_hcm_rnn()
-
-
-    generate_hierarchy_and_rational_learn()
-
     main()
 
