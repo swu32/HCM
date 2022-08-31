@@ -1,4 +1,3 @@
-
 import argparse
 import torch
 import numpy as np
@@ -7,15 +6,15 @@ from torch.utils.data import DataLoader
 from nn_model import Model
 from dataset import Dataset
 
+
 def train(dataset, model, args):
     model.train()
 
-    dataloader = DataLoader(
-        dataset,
-        batch_size=args.batch_size,
-    )
+    dataloader = DataLoader(dataset, batch_size=args.batch_size,)
     criterion = nn.CrossEntropyLoss()
-    optimizer = optim.Adam(model.parameters(), lr=args.learning_rate)# originally 0.001
+    optimizer = optim.Adam(
+        model.parameters(), lr=args.learning_rate
+    )  # originally 0.001
 
     for epoch in range(args.max_epochs):
         state_h, state_c = model.init_state(args.sequence_length)
@@ -32,10 +31,10 @@ def train(dataset, model, args):
             loss.backward()
             optimizer.step()
 
-        print({ 'epoch': epoch, 'loss': loss.item() })
+        print({"epoch": epoch, "loss": loss.item()})
 
 
-def predict(dataset, model, next_words=1000, words = [0]):
+def predict(dataset, model, next_words=1000, words=[0]):
     predictedword = []
     predictedwordp = []
     model.eval()
@@ -49,7 +48,7 @@ def predict(dataset, model, next_words=1000, words = [0]):
 
         last_word_logits = y_pred[0][-1]
         p = torch.nn.functional.softmax(last_word_logits, dim=0).detach().numpy()
-        #word_index = np.argmax(p)
+        # word_index = np.argmax(p)
         word_index = np.random.choice(len(last_word_logits), p=p)
         words.append(word_index)
         predictedwordp.append(p[word_index])
@@ -58,12 +57,14 @@ def predict(dataset, model, next_words=1000, words = [0]):
     return predictedword, predictedwordp
 
 
-def evaluate_next_word_probability(model, next_word, words = [0]):
-    '''Evaluate the probability of the next_word appearing in the sequence '''
+def evaluate_next_word_probability(model, next_word, words=[0]):
+    """Evaluate the probability of the next_word appearing in the sequence """
     model.eval()
-    state_h, state_c = model.init_state(len(words)) # intialize based on the previous words
+    state_h, state_c = model.init_state(
+        len(words)
+    )  # intialize based on the previous words
     x = torch.tensor([[w for w in words[0:]]])
-    y_pred, (_,_) = model(x, (state_h, state_c))
+    y_pred, (_, _) = model(x, (state_h, state_c))
     last_word_logits = y_pred[0][-1]
     p = torch.nn.functional.softmax(last_word_logits, dim=0).detach().numpy()
     return p[next_word]

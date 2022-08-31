@@ -2,6 +2,7 @@ from Learning import *
 import numpy as np
 import copy
 
+
 class CG1:
     """
     Chunking graph class with sparse observational data representation.
@@ -114,11 +115,13 @@ class CG1:
         for chunk in self.chunks:
             c_sz = chunk.volume
             c_p = chunk.count / N
-            ER = ER + c_p * (- np.log(c_p) / c_sz)
+            ER = ER + c_p * (-np.log(c_p) / c_sz)
 
         return ER
 
-    def getmaxchunksize(self):  # TODO: alternatively, update this value upon every chunk creation
+    def getmaxchunksize(
+        self,
+    ):  # TODO: alternatively, update this value upon every chunk creation
         maxchunksize = 0
         if len(self.chunks) > 0:
             for ck in self.chunks:
@@ -129,9 +132,14 @@ class CG1:
 
     def observation_to_tuple(self, relevant_observations):
         """relevant_observations: array like object"""
-        index_t, index_i, index_j = np.nonzero(relevant_observations)  # observation indexes
-        value = [relevant_observations[t, i, j] for t, i, j in zip(index_t, index_i, index_j) if
-                 relevant_observations[t, i, j] > 0]
+        index_t, index_i, index_j = np.nonzero(
+            relevant_observations
+        )  # observation indexes
+        value = [
+            relevant_observations[t, i, j]
+            for t, i, j in zip(index_t, index_i, index_j)
+            if relevant_observations[t, i, j] > 0
+        ]
         content = set(zip(index_t, index_i, index_j, value))
         maxT = max(index_t)
         return (content, maxT)
@@ -163,18 +171,19 @@ class CG1:
             chunk.to_array()
         return
 
-    def save_graph(self, name='', path='../OutputData/'):
+    def save_graph(self, name="", path="../OutputData/"):
         """save graph configuration for visualization"""
         import json
+
         chunklist = []
         for ck in self.chunks:
             ck.to_array()
             chunklist.append(ck.arraycontent)
         data = {}
-        data['vertex_location'] = self.vertex_location
-        data['edge_list'] = self.edge_list
+        data["vertex_location"] = self.vertex_location
+        data["edge_list"] = self.edge_list
         # chunklist and graph structure is stored separately
-        Name = path + name + 'graphstructure.json'
+        Name = path + name + "graphstructure.json"
         a_file = open(Name, "w")
         json.dump(data, a_file)
         a_file.close()
@@ -212,8 +221,9 @@ class CG1:
         if chunk.parents == []:
             return content != chunk.content
         else:
-            return np.any([self.check_ancestry(parent, content) for parent in chunk.parents])
-
+            return np.any(
+                [self.check_ancestry(parent, content) for parent in chunk.parents]
+            )
 
     def forget(self):
         """ discounting past observations if the number of frequencies is beyond deletion threshold"""
@@ -249,9 +259,12 @@ class CG1:
         current = self.chunks[currentidx]
         chunk = self.checkcontentoverlap(cat.content)
         if chunk is None:
-            self.add_chunk(cat, leftidx=previdx, rightidx=currentidx)  # add concatinated chunk to the network
+            self.add_chunk(
+                cat, leftidx=previdx, rightidx=currentidx
+            )  # add concatinated chunk to the network
             cat.count = prev.adjacency[dt][
-                currentidx]  # need to add estimates of how frequent the joint frequency occurred
+                currentidx
+            ]  # need to add estimates of how frequent the joint frequency occurred
             cat.adjacency = copy.deepcopy(current.adjacency)
             # iterate through chunk organization find alternative paths arriving at the same chunk
             for _prevck in self.chunks:
@@ -263,7 +276,10 @@ class CG1:
                             _cat = combinechunks(_previdx, _postidx, _dt, self)
                             if _cat != None:
                                 if _cat.contentagreement(cat.content):  # the same chunk
-                                    cat.count = cat.count + self.chunks[_previdx].adjacency[_dt][_postidx]
+                                    cat.count = (
+                                        cat.count
+                                        + self.chunks[_previdx].adjacency[_dt][_postidx]
+                                    )
                                     self.chunks[_previdx].adjacency[_dt][_postidx] = 0
         else:
             chunk.count = chunk.count + prev.adjacency[dt][currentidx]
@@ -328,7 +344,9 @@ class CG1:
         op1p0 = cl.get_N_transition(dt) - cl.adjacency[dt][cridx]
         op0p1 = 0
         op0p0 = 0
-        for ncl in list(self.chunks):  # iterate over p0, which is the cases where cl is not observed
+        for ncl in list(
+            self.chunks
+        ):  # iterate over p0, which is the cases where cl is not observed
             if ncl != cl:
                 if dt in list(ncl.adjacency.keys()):
                     if cridx in list(ncl.adjacency[dt].keys()):
@@ -339,8 +357,8 @@ class CG1:
 
         obs = [op1p1, op1p0, op0p1, op0p0]
         exp = [ep1p1, ep1p0, ep0p1, ep0p0]
-        obs = [item/sum(obs) for item in obs]
-        exp = [item/sum(exp) for item in exp]
+        obs = [item / sum(obs) for item in obs]
+        exp = [item / sum(exp) for item in exp]
         _, pvalue = stats.chisquare(obs, f_exp=exp, ddof=1)
         if pvalue < threshold:
             return False  # reject independence hypothesis, there is a correlation

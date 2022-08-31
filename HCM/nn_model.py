@@ -1,6 +1,7 @@
 import torch
 from torch import nn
 
+
 class Model(nn.Module):
     def __init__(self, dataset):
         super(Model, self).__init__()
@@ -10,8 +11,7 @@ class Model(nn.Module):
 
         n_vocab = len(dataset.uniq_words())
         self.embedding = nn.Embedding(
-            num_embeddings=n_vocab,
-            embedding_dim=self.embedding_dim,
+            num_embeddings=n_vocab, embedding_dim=self.embedding_dim,
         )
         self.lstm = nn.LSTM(
             input_size=self.lstm_size,
@@ -29,8 +29,11 @@ class Model(nn.Module):
         return logits, state
 
     def init_state(self, sequence_length):
-        return (torch.zeros(self.num_layers, sequence_length, self.lstm_size),
-                torch.zeros(self.num_layers, sequence_length, self.lstm_size))
+        return (
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+        )
+
 
 class Model1(nn.Module):
     def __init__(self, dataset):
@@ -41,8 +44,7 @@ class Model1(nn.Module):
 
         n_vocab = len(dataset.uniq_words())
         self.embedding = nn.Embedding(
-            num_embeddings=n_vocab,
-            embedding_dim=self.embedding_dim,
+            num_embeddings=n_vocab, embedding_dim=self.embedding_dim,
         )
         self.lstm = nn.LSTM(
             input_size=self.lstm_size,
@@ -60,12 +62,13 @@ class Model1(nn.Module):
         return logits, state
 
     def init_state(self, sequence_length):
-        return (torch.zeros(self.num_layers, sequence_length, self.lstm_size),
-                torch.zeros(self.num_layers, sequence_length, self.lstm_size))
+        return (
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+        )
 
 
 class Model2(nn.Module):
-
     def __init__(self, dataset):
         super(Model2, self).__init__()
         self.lstm_size = 40
@@ -74,8 +77,7 @@ class Model2(nn.Module):
 
         n_vocab = len(dataset.uniq_words())
         self.embedding = nn.Embedding(
-            num_embeddings=n_vocab,
-            embedding_dim=self.embedding_dim,
+            num_embeddings=n_vocab, embedding_dim=self.embedding_dim,
         )
         self.lstm = nn.LSTM(
             input_size=self.lstm_size,
@@ -93,6 +95,7 @@ class Model2(nn.Module):
         return logits, state
 
     def init_state(self, sequence_length):
-        return (torch.zeros(self.num_layers, sequence_length, self.lstm_size),
-                torch.zeros(self.num_layers, sequence_length, self.lstm_size))
-
+        return (
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+            torch.zeros(self.num_layers, sequence_length, self.lstm_size),
+        )
