@@ -337,7 +337,7 @@ def fmri():
         cg, chunkrecord = hcm_learning(
             seq, cg
         )  # with the rational chunk models, rational_chunk_all_info(seq, cg)
-        cg.save_graph(name="subject" + str(i), path="./fmri_chunk_data/")
+        cg.save_graph(name='subject' + str(i), path='fmri_chunk_data')
         # reparse the sequence, using the biggest chunks
         cg.reinitialize()
         cg, chunkrecord = hcm_learning(

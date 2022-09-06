@@ -171,20 +171,21 @@ class CG1:
             chunk.to_array()
         return
 
-    def save_graph(self, name="", path="../OutputData/"):
+    def save_graph(self, name, path):
         """save graph configuration for visualization"""
         import json
-
+        import os
         chunklist = []
         for ck in self.chunks:
             ck.to_array()
             chunklist.append(ck.arraycontent)
         data = {}
-        data["vertex_location"] = self.vertex_location
-        data["edge_list"] = self.edge_list
+        data['vertex_location'] = self.vertex_location
+        data['edge_list'] = self.edge_list
         # chunklist and graph structure is stored separately
-        Name = path + name + "graphstructure.json"
-        a_file = open(Name, "w")
+
+        out_file = os.path.join("../OutputData", path, f"{name}graphstructure.json")
+        a_file = open(out_file, "w")
         json.dump(data, a_file)
         a_file.close()
         return
