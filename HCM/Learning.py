@@ -1193,7 +1193,7 @@ def arr_to_tuple(arr):
 
 
 def tuple_to_arr(tup):
-    return np.array(tup)
+    return np.array(tup, dtype = object)
 
 
 def refactor_observation(observation, return_max_k=False):
@@ -1426,19 +1426,22 @@ def learn_stc_classes(sequence, cg):
     return cg
 
 
-def independence_test(pM, pT, N):
+def independence_test(pM, pT, N, Print = False):
     # f_obs, f_exp = None, ddof = 0
     f_obs = []
     f_exp = []
     B = list(pM.keys())
     for cl in B:
         for cr in B:
-            pclcr = pM[cl] * pM[cr] * N  # expected number of observations
-            oclcr = pM[cl] * pT[cl][cr] * N  # number of observations
+            pclcr = pM[cl] * pM[cr]  # expected number of observations
+            oclcr = pM[cl] * pT[cl][cr]   # number of observations
             f_exp.append(pclcr)
             f_obs.append(oclcr)
-    # f_exp = [item/sum(f_exp) for item in f_exp]
-    # f_obs = [item / sum(f_obs) for item in f_obs]
+
+    if Print:
+        print(np.sum(f_exp), np.sum(f_obs))
+    f_exp = [item * N /sum(f_exp) for item in f_exp]
+    f_obs = [item * N / sum(f_obs) for item in f_obs]
     df = (len(B) - 1) ** 2
     _, pvalue = stats.chisquare(f_obs, f_exp=f_exp, ddof=df)
 
@@ -1666,9 +1669,9 @@ def partition_seq_hastily(this_sequence, bag_of_chunks, freq=False):
             this_chunk = tuple_to_arr(chunk)
             len_this_chunk = this_chunk.shape[0]
             if i + len_this_chunk < lsq:
-                if np.isclose(
+                if np.array_equal(
                     this_sequence[i : i + len_this_chunk, :, :], this_chunk
-                ).all():
+                ):
                     if len_this_chunk >= mxl:
                         mxl = len_this_chunk
                         mxck = this_chunk
