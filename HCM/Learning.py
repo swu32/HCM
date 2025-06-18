@@ -1,4 +1,5 @@
 from scipy import stats
+import numpy as np
 
 from Chunking_Graph import *
 from buffer import *
