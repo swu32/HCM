@@ -4,7 +4,7 @@ import numpy as np
 class Chunk:
     """ Spatial Temporal Chunk
         At the moment, it lacks a unique identifier for which of the chunk is which, making the searching process
-        diffidult, ideally, each chunk should have its own unique name, (ideally related to how it looks like)
+        difficult, ideally, each chunk should have its own unique name, (ideally related to how it looks like)
 
 
     Attributes
