@@ -61,7 +61,7 @@ class CG1:
     save_graph:
         save and store chunking graph
     add_chunk:
-    check_ancenstry:
+    check_ancestry:
         check the ancestors of a specific chunk
     forget:
         decay the count frequency by a factor
